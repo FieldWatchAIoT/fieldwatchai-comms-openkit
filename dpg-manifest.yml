@@ -1,0 +1,108 @@
+# Digital Public Goods manifest
+#
+# Metadata describing this project against the Digital Public Goods Alliance
+# schema. This file signals intent to submit to the DPG Registry (target: Q1
+# 2027) and is a machine-readable companion to docs/dpg-alignment.md.
+#
+# Reference: https://digitalpublicgoods.net/standard/
+
+name: FieldWatch Comms OpenKit
+aliases:
+  - Comms OpenKit
+description: >-
+  Open protocol and reference implementations for disaster-response
+  communications infrastructure. Publishes a canonical message schema, a
+  rule-based command parser grammar, an AI-teammate protocol, and a
+  transport adapter contract so any climate-vulnerable jurisdiction can
+  stand up interoperable disaster-comms tooling without licensing a
+  commercial product.
+
+website: https://fieldwatch.earth/
+license:
+  - spdx: Apache-2.0
+    licenseURL: https://github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/blob/main/LICENSE
+repositoryURL: https://github.com/FieldWatchAIoT/fieldwatchai-comms-openkit
+organizations:
+  - name: FieldWatch AI
+    website: https://fieldwatch.earth/
+    org_type: owner
+    contact_email: hello@fieldwatchai.io
+
+# DPG Standard categories
+categories:
+  - emerging-technologies
+
+# Sustainable Development Goals — targets this project explicitly addresses.
+SDGs:
+  - SDGNumber: 11
+    evidenceText: >-
+      Target 11.5 — reduce deaths and losses from disasters. The OpenKit
+      publishes the coordination protocol behind FieldWatch's disaster-
+      response product; the founding narrative is Hurricane Dorian
+      (Bahamas, 2019), where coordination failure across consumer
+      messaging tools compounded the death toll.
+  - SDGNumber: 13
+    evidenceText: >-
+      Target 13.1 — strengthen resilience and adaptive capacity to
+      climate-related hazards. The OpenKit is aimed at climate-vulnerable
+      small island developing states that cannot afford enterprise
+      disaster-comms tooling.
+  - SDGNumber: 17
+    evidenceText: >-
+      Target 17.6 — enhance cooperation on and access to technology.
+      The OpenKit is an open protocol and open reference implementations
+      any government, NGO, or research group can adopt.
+
+# DPG Standard indicators — see docs/dpg-alignment.md for the full mapping.
+# Values: "yes" | "no" | "N/A". A more detailed status (complete / in
+# progress / planned) is tracked in docs/dpg-alignment.md.
+standardsAndBestPractices:
+  - Apache-2.0 (SPDX)
+  - JSON Schema (draft 2020-12) for wire format
+  - RFC 3339 for timestamps
+  - E.164 for phone numbers
+  - RFC 5321 for email mailbox format
+  - Constant-time comparison for secret verification
+  - Semantic Versioning for spec releases
+
+# Machine-readability + interoperability of the outputs.
+type:
+  - software
+  - standard
+
+# Development status.
+stage: development
+
+# Non-collection of PII: the schema is designed to minimize collection to
+# only what the source platform delivered. See docs/dpg-alignment.md
+# indicator 7.
+privacyAndDataProtection: >-
+  Data minimization: adapters emit exactly what the source platform
+  delivered — no enrichment, no geolocation, no profiling. Media is
+  passed through as URLs to platform hosting; the OpenKit does not
+  re-host. Reference implementations do not log message bodies at
+  INFO or higher log levels. Tenant-defined retention and hard-delete
+  are on the near roadmap.
+
+# Do-no-harm posture — most relevant to the AI-teammate protocol.
+doNoHarm: >-
+  The rule-based parser is deliberately deterministic — an LLM does
+  not decide what a message means on the hot path. The AI-teammate
+  protocol constrains any AI participant to be silent by default,
+  summoned only, always yielding to humans, read-only in v1, with
+  every action audit-logged. Verification is fail-closed on every
+  webhook. A dedicated harms-analysis document is targeted for Q1 2027.
+
+# Contacts.
+contact:
+  general: hello@fieldwatchai.io
+  security: security@fieldwatchai.io
+  conduct: conduct@fieldwatchai.io
+
+# Origin.
+originatingCountry: BS  # Bahamas (ISO 3166-1 alpha-2)
+
+# Registry submission status.
+registrySubmission:
+  targetDate: 2027-Q1
+  status: not-yet-submitted
