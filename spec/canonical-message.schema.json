@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/FieldWatchAIoT/fieldwatchai-comms-openkit/main/spec/canonical-message.schema.json",
+  "title": "FieldWatch Comms — Canonical Message",
+  "description": "The normalized wire format that every inbound platform adapter emits and every downstream consumer accepts. Every property is always present. Absent values are JSON null, never omitted, never an empty string, never an empty array unless the array's absence is semantically meaningful.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sender", "body", "meta"],
+  "properties": {
+    "sender": {
+      "type": "object",
+      "description": "Who the message came from, as best the platform reports it. endpoint and platform are always populated; the rest may be null when the platform does not expose them.",
+      "additionalProperties": false,
+      "required": ["endpoint", "platform", "handle", "full_name", "first_name", "last_name", "email", "avatar_url"],
+      "properties": {
+        "endpoint": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The platform-specific address the message came from. E164-formatted phone number for SMS / WhatsApp, RFC5321 mailbox for email, Telegram chat id as a string, etc. Adapters MUST normalize this before emitting."
+        },
+        "platform": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Normalized platform identifier. Reserved values include: whatsapp, sms, telegram, email, satellite, voice. New platform values MUST be lowercase, ASCII, and hyphen-free.",
+          "examples": ["whatsapp", "sms", "telegram", "email"]
+        },
+        "handle": {
+          "type": ["string", "null"],
+          "description": "Platform-native username or screen name (Telegram @handle, WhatsApp WaId, etc.). null when the platform does not surface one."
+        },
+        "full_name": {
+          "type": ["string", "null"],
+          "description": "The sender's display name as the platform reports it. null when unknown."
+        },
+        "first_name": {
+          "type": ["string", "null"]
+        },
+        "last_name": {
+          "type": ["string", "null"]
+        },
+        "email": {
+          "type": ["string", "null"],
+          "description": "Email address if the platform provides one (SES email adapter always populates this)."
+        },
+        "avatar_url": {
+          "type": ["string", "null"],
+          "format": "uri",
+          "description": "URL to the sender's avatar image, if the platform hosts one and the adapter can obtain it without side effects. Adapters MUST NOT re-host avatars."
+        }
+      }
+    },
+    "body": {
+      "type": "object",
+      "description": "The message contents. text, attachments, and location are each present but individually may be empty / null.",
+      "additionalProperties": false,
+      "required": ["text", "attachments", "location"],
+      "properties": {
+        "text": {
+          "type": ["string", "null"],
+          "description": "Plain-text body. Adapters SHOULD prefer text/plain over text/html for email. null when the message carries no text (a location share, a bare image, etc.)."
+        },
+        "attachments": {
+          "type": "array",
+          "description": "Media items attached to the message. An empty array means no attachments — this array is never null.",
+          "items": {"$ref": "#/$defs/Attachment"}
+        },
+        "location": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/Location"}
+          ],
+          "description": "Geographic point, when the message carries one. null otherwise."
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "description": "Delivery and provenance metadata.",
+      "additionalProperties": false,
+      "required": ["platform_message_id", "received_at", "in_reply_to_id", "account_id", "raw_payload"],
+      "properties": {
+        "platform_message_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The platform's unique identifier for this message. REQUIRED. This is the idempotency key downstream consumers use to dedupe on redelivery, so it MUST be stable across retries."
+        },
+        "received_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The moment the adapter received the message from the platform. RFC 3339, UTC. This is the adapter's own clock, not the platform's."
+        },
+        "in_reply_to_id": {
+          "type": ["string", "null"],
+          "description": "The platform_message_id this message is a reply to, if the platform reports a threading relationship. null otherwise."
+        },
+        "account_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The consumer's internal account identifier that this inbound message routed to. The adapter resolves this by looking up the sender against the consumer's account directory before emitting."
+        },
+        "raw_payload": {
+          "description": "The original inbound payload from the platform, preserved verbatim. Serialized as JSON (object, array, string — whatever the platform sent). null when the platform did not send a payload. This field exists so downstream consumers can debug parser bugs against the real source.",
+          "oneOf": [
+            {"type": "object"},
+            {"type": "array"},
+            {"type": "string"},
+            {"type": "null"}
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "Attachment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "url", "mime"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Coarse media class. Reserved values: image, video, audio, document, sticker.",
+          "enum": ["image", "video", "audio", "document", "sticker"]
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "URL to the media on the platform's own hosting. Adapters MUST NOT re-host. Consumers that need the bytes are responsible for fetching (some platforms require auth — see per-adapter notes)."
+        },
+        "mime": {
+          "type": ["string", "null"],
+          "description": "MIME type reported by the platform, when available. null when unknown."
+        }
+      }
+    },
+    "Location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lat", "lng"],
+      "properties": {
+        "lat": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "lng": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        }
+      }
+    }
+  }
+}
