@@ -52,7 +52,7 @@ In scope:
 Out of scope for this repository (but please still tell us if you find
 something — we will route it):
 
-- FieldWatch's own hosted product at `fieldwatchai.io` or `fieldwatch.earth`.
+- FieldWatch's own hosted product at `fieldwatch.earth`.
 - Third-party platforms the reference adapters integrate with (WhatsApp,
   Twilio, Telegram, AWS SES). Report those to the platform vendor.
 

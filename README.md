@@ -2,7 +2,7 @@
 
 **An open protocol and reference implementations for disaster-response communications infrastructure.**
 
-Built in the Bahamas by [FieldWatch AI](https://fieldwatchai.io). Licensed Apache 2.0. Being prepared as a Digital Public Good.
+Built in the Bahamas by [FieldWatch AI](https://fieldwatch.earth/). Licensed Apache 2.0. Being prepared as a Digital Public Good.
 
 ---
 
@@ -92,7 +92,7 @@ Apache License 2.0. See [`LICENSE`](./LICENSE).
 
 ## Attribution and origin
 
-The Comms OpenKit is developed and maintained by [FieldWatch AI](https://fieldwatchai.io), a company based in Nassau, The Bahamas, and founded after Hurricane Dorian.
+The Comms OpenKit is developed and maintained by [FieldWatch AI](https://fieldwatch.earth/), a company based in Nassau, The Bahamas, and founded after Hurricane Dorian.
 
 This work is being carried out in part under a commitment to the UNFCCC AI for Climate Action Award programme. The award recognizes the intent to open-source the protocol and reference implementations underlying FieldWatch's disaster-response coordination product, so that any climate-vulnerable jurisdiction can adopt the same infrastructure without paying for it.
 
