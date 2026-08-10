@@ -73,6 +73,32 @@ type:
 # Development status.
 stage: development
 
+# Reference implementations shipped in-repo. Each is a working, runnable
+# starter that adopters can build against or deploy directly. Additional
+# implementations (satellite adapters, voice) are on the roadmap — see the
+# root README.
+implementations:
+  - name: webhook-go
+    language: Go
+    path: implementations/webhook-go
+    description: >-
+      Inbound webhook receiver. Verifies platform signatures/secrets,
+      normalizes payloads into the canonical message schema, buffers to a
+      durable queue (SQS or in-memory), and forwards to a downstream
+      channels service. Ships UltraMSG WhatsApp, Twilio SMS+WhatsApp,
+      Telegram Bot API, and AWS SES email listeners in one binary.
+    runnable: docker compose up --build
+    deployment:
+      - kind: docker-compose
+        path: implementations/webhook-go/docker-compose.yml
+      - kind: terraform-aws
+        path: implementations/webhook-go/deploy/terraform/aws
+        description: >-
+          Minimal ECS Fargate + ALB + SQS reference module. Reviewable
+          in one sitting; adapters should read the module README before
+          applying (default VPC / public subnets are used only so a
+          first-time apply works out of the box).
+
 # Non-collection of PII: the schema is designed to minimize collection to
 # only what the source platform delivered. See docs/dpg-alignment.md
 # indicator 7.
