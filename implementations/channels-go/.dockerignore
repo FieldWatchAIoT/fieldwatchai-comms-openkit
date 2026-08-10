@@ -1,0 +1,10 @@
+.git
+bin
+out
+*.md
+.github
+docker-compose.yml
+.env
+.env.*
+.DS_Store
+deploy/terraform

@@ -1,0 +1,46 @@
+# Local end-to-end dev: comms-channels + Postgres 16 (PostGIS).
+#
+#   docker compose up --build
+#   curl -s http://localhost:9090/healthz    # {"status":"ok"} once ready
+#
+# For the full openkit stack (webhook -> channels wired end-to-end), use the
+# docker-compose.yml at the repo root instead.
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: openkit
+      POSTGRES_PASSWORD: openkit
+      POSTGRES_DB: openkit
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openkit -d openkit"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - channels_pgdata:/var/lib/postgresql/data
+
+  comms-channels:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "9090:9090"
+    environment:
+      ENV: "local"
+      PORT: "9090"
+      LOG_LEVEL: "info"
+      DATABASE_URL: "postgres://openkit:openkit@db:5432/openkit?sslmode=disable"
+      INTERNAL_API_TOKEN: "local-token"
+      CREDENTIALS_ENCRYPTION: "localaes"
+      # base64 of 32 zero bytes — dev-only key, do NOT reuse in any real deploy.
+      LOCAL_AES_KEY: "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
+      AWS_REGION: "us-west-2"
+
+volumes:
+  channels_pgdata:

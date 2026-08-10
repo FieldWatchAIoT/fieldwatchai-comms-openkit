@@ -1,0 +1,23 @@
+# iCloud .git armor (see CLAUDE.md)
+.git.nosync/
+
+# Build output
+/bin/
+/out/
+
+# Local env
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Test artifacts
+*.test
+coverage.out
