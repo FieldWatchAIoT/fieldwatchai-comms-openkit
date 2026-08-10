@@ -1,0 +1,21 @@
+# Terraform state + plans (never commit)
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Backend + variable values (may contain secrets/account IDs)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+terraform.tfvars
+*.auto.tfvars
+
+# Local provider + module caches (the lock file is intentionally NOT ignored —
+# commit .terraform.lock.hcl per HashiCorp's recommendation)
+.terraform/
+
+# CLI plan output
+.tfplan

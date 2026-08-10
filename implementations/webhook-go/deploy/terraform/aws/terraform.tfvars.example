@@ -1,0 +1,62 @@
+##################################################################
+# comms-openkit webhook — example tfvars
+##################################################################
+# Copy to terraform.tfvars (gitignored) and fill in real values.
+
+aws_region   = "us-west-2"
+service_name = "comms-openkit-webhook"
+
+# ---- container image (build + push before apply) ----------------
+# See README for the docker build / docker push commands.
+container_image = "123456789012.dkr.ecr.us-west-2.amazonaws.com/comms-openkit-webhook:v0.1.0"
+
+# ---- networking -------------------------------------------------
+# Leave empty to use the account's default VPC + default subnets.
+# For a real deployment, pass your own VPC + at least two public subnets in
+# different AZs.
+vpc_id            = ""
+public_subnet_ids = []
+
+# ---- TLS --------------------------------------------------------
+# ACM certificate ARN (in the same region as aws_region). Required.
+certificate_arn = "arn:aws:acm:us-west-2:123456789012:certificate/REPLACE-ME"
+
+# ---- downstream channels service --------------------------------
+channels_url = "https://channels.example.com"
+
+# ---- secrets (Secrets Manager ARNs) -----------------------------
+# The task-execution role gets read on every ARN listed here.
+internal_api_token_secret_arn = "arn:aws:secretsmanager:us-west-2:123456789012:secret:comms/internal_api_token-XXXXXX"
+
+# Any subset. A listener is registered inside the app ONLY when its secret env
+# var is set — so omit an entry to leave that listener disabled.
+platform_secret_arn_map = {
+  WHATSAPP_ULTRAMSG_WEBHOOK_SECRET = "arn:aws:secretsmanager:us-west-2:123456789012:secret:comms/ultramsg-XXXXXX"
+  # TWILIO_AUTH_TOKEN                = "arn:aws:secretsmanager:us-west-2:123456789012:secret:comms/twilio-XXXXXX"
+  # TELEGRAM_WEBHOOK_SECRET          = "arn:aws:secretsmanager:us-west-2:123456789012:secret:comms/telegram-XXXXXX"
+  # EMAIL_SES_WEBHOOK_SECRET         = "arn:aws:secretsmanager:us-west-2:123456789012:secret:comms/ses-XXXXXX"
+}
+
+# ---- non-secret env vars ----------------------------------------
+# Whatever the app needs that isn't a secret. Common:
+#   PUBLIC_BASE_URL     — the public origin Twilio signs against; required if
+#                          TWILIO_AUTH_TOKEN is set. Use your webhook's real URL.
+#   EMAIL_SES_TOPIC_ARN — SNS topic allowlist; required if
+#                          EMAIL_SES_WEBHOOK_SECRET is set.
+#   ACCOUNTS_MAP        — JSON platform -> {identifier -> account_id} mapping.
+extra_env = {
+  PUBLIC_BASE_URL = "https://webhook.example.com"
+  # EMAIL_SES_TOPIC_ARN = "arn:aws:sns:us-west-2:123456789012:comms-webhook-email"
+  # ACCOUNTS_MAP        = "{\"whatsapp-ultramsg\":{\"instance123\":\"acc_abc\"}}"
+}
+
+# ---- sizing -----------------------------------------------------
+task_cpu      = 256
+task_memory   = 512
+desired_count = 2
+
+# ---- tags -------------------------------------------------------
+tags = {
+  Environment = "prod"
+  Owner       = "your-team"
+}
