@@ -1,0 +1,9 @@
+.git
+.github
+docs
+deploy
+README.md
+*.md
+.DS_Store
+bin
+**/*_test.go
