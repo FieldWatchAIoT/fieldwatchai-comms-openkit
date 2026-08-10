@@ -10,26 +10,32 @@ platform's destination to a consumer account.
 
 ## What is here now
 
-Every adapter listed below now ships as a working listener inside the
-[Go reference implementation](../implementations/webhook-go/). These
-starter READMEs remain as the platform-level explanation (identity,
-verify, payload shape, gotchas) and point at the working code in
-`implementations/webhook-go/internal/listeners/<platform>/`.
+Every adapter listed below now ships as a working listener in the
+[Go webhook reference](../implementations/webhook-go/) (inbound side)
+AND as a working outbound integration in the
+[Go channels reference](../implementations/channels-go/) (outbound side).
+These starter READMEs remain as the platform-level explanation (identity,
+verify, payload shape, gotchas) and point at both sides of the wire.
 
-| Adapter | Platform | Working code | Starter README |
-|---|---|---|---|
-| `whatsapp-ultramsg` | WhatsApp via [UltraMSG](https://ultramsg.com/) | [`internal/listeners/ultramsg/`](../implementations/webhook-go/internal/listeners/ultramsg/) | [read](./whatsapp-ultramsg/README.md) |
-| `twilio-sms` | SMS + WhatsApp via [Twilio](https://www.twilio.com/) | [`internal/listeners/twilio/`](../implementations/webhook-go/internal/listeners/twilio/) | [read](./twilio-sms/README.md) |
-| `telegram-bot` | Telegram via [Bot API](https://core.telegram.org/bots/api) | [`internal/listeners/telegram/`](../implementations/webhook-go/internal/listeners/telegram/) | [read](./telegram-bot/README.md) |
-| `aws-ses-email` | Email via [AWS SES](https://aws.amazon.com/ses/) inbound | [`internal/listeners/email/`](../implementations/webhook-go/internal/listeners/email/) | [read](./aws-ses-email/README.md) |
+| Adapter | Platform | Inbound listener | Outbound integration | Starter README |
+|---|---|---|---|---|
+| `whatsapp-ultramsg` | WhatsApp via [UltraMSG](https://ultramsg.com/) | [`internal/listeners/ultramsg/`](../implementations/webhook-go/internal/listeners/ultramsg/) | [`internal/integrations/ultramsg/`](../implementations/channels-go/internal/integrations/ultramsg/) | [read](./whatsapp-ultramsg/README.md) |
+| `twilio-sms` | SMS + WhatsApp via [Twilio](https://www.twilio.com/) | [`internal/listeners/twilio/`](../implementations/webhook-go/internal/listeners/twilio/) | [`internal/integrations/twilio/`](../implementations/channels-go/internal/integrations/twilio/) | [read](./twilio-sms/README.md) |
+| `telegram-bot` | Telegram via [Bot API](https://core.telegram.org/bots/api) | [`internal/listeners/telegram/`](../implementations/webhook-go/internal/listeners/telegram/) | [`internal/integrations/telegram/`](../implementations/channels-go/internal/integrations/telegram/) | [read](./telegram-bot/README.md) |
+| `aws-ses-email` | Email via [AWS SES](https://aws.amazon.com/ses/) | [`internal/listeners/email/`](../implementations/webhook-go/internal/listeners/email/) | [`internal/integrations/emailses/`](../implementations/channels-go/internal/integrations/emailses/) | [read](./aws-ses-email/README.md) |
 
-To try any of them:
+To try the full round-trip (inbound + persist + outbound reply) locally, use
+the root `docker-compose.yml` — it brings up webhook + channels + Postgres +
+LocalStack together:
 
 ```sh
-cd implementations/webhook-go
+cd ../   # to the repo root
 docker compose up --build
-# then curl the /inbound/<adapter-id> endpoint (see impl README for a walkthrough)
+# then curl the /inbound/<adapter-id> endpoint on http://localhost:8080
 ```
+
+For inbound-only experimentation, `cd implementations/webhook-go && docker
+compose up --build` (bundled `fakechannels` stub, no DB).
 
 ## Coming on the roadmap
 

@@ -2,7 +2,10 @@
 
 **Adapter id:** `email-ses`
 **Canonical platform:** `email`
-**Status:** shipped. Working listener at [`implementations/webhook-go/internal/listeners/email/`](../../implementations/webhook-go/internal/listeners/email/).
+**Status:** shipped both directions.
+
+- **Inbound listener** — [`implementations/webhook-go/internal/listeners/email/`](../../implementations/webhook-go/internal/listeners/email/) (subscribed to an SNS topic that SES publishes inbound to; verifies the shared secret in the subscription URL + the topic-ARN allowlist, then normalizes the SES receipt into a canonical message).
+- **Outbound integration** — [`implementations/channels-go/internal/integrations/emailses/`](../../implementations/channels-go/internal/integrations/emailses/) (builds a MIME reply preserving `In-Reply-To`/`References` for threading and calls SES v2 `SendEmail`; authenticates via the ECS task IAM role, so there is no per-account credential to store).
 
 Inbound email over AWS Simple Email Service. This is the adapter that
 lets a disaster-management agency accept reports from anyone with an

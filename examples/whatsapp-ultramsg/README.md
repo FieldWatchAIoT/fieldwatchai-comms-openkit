@@ -2,17 +2,20 @@
 
 **Adapter id:** `whatsapp-ultramsg`
 **Canonical platform:** `whatsapp`
-**Status:** shipped. Working listener at [`implementations/webhook-go/internal/listeners/ultramsg/`](../../implementations/webhook-go/internal/listeners/ultramsg/); captured test payloads at [`implementations/webhook-go/internal/listeners/ultramsg/testdata/`](../../implementations/webhook-go/internal/listeners/ultramsg/testdata/).
+**Status:** shipped both directions.
 
-Round-trip it end-to-end locally:
+- **Inbound listener** — [`implementations/webhook-go/internal/listeners/ultramsg/`](../../implementations/webhook-go/internal/listeners/ultramsg/) (verifies the shared secret, parses UltraMSG's JSON, emits a canonical message). Captured test payloads at [`testdata/`](../../implementations/webhook-go/internal/listeners/ultramsg/testdata/).
+- **Outbound integration** — [`implementations/channels-go/internal/integrations/ultramsg/`](../../implementations/channels-go/internal/integrations/ultramsg/) (decrypts the account's UltraMSG credentials via the KMS/AES Encryptor and POSTs the reply to UltraMSG's `messages/chat` endpoint).
+
+Round-trip it end-to-end locally with the root docker-compose:
 
 ```sh
-cd ../../implementations/webhook-go
+cd ../../          # to the repo root
 docker compose up --build
 # in another terminal:
 curl -X POST 'http://localhost:8080/inbound/whatsapp-ultramsg?token=local-secret' \
      -H 'Content-Type: application/json' \
-     --data @internal/listeners/ultramsg/testdata/text.json
+     --data @implementations/webhook-go/internal/listeners/ultramsg/testdata/text.json
 ```
 
 The rest of this README explains the platform-level shape of the adapter.

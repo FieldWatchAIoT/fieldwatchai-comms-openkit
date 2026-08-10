@@ -2,7 +2,10 @@
 
 **Adapter id:** `telegram`
 **Canonical platform:** `telegram`
-**Status:** shipped. Working listener at [`implementations/webhook-go/internal/listeners/telegram/`](../../implementations/webhook-go/internal/listeners/telegram/).
+**Status:** shipped both directions.
+
+- **Inbound listener** — [`implementations/webhook-go/internal/listeners/telegram/`](../../implementations/webhook-go/internal/listeners/telegram/) (verifies the `X-Telegram-Bot-Api-Secret-Token` header set at `setWebhook` time, parses the update JSON, emits a canonical message).
+- **Outbound integration** — [`implementations/channels-go/internal/integrations/telegram/`](../../implementations/channels-go/internal/integrations/telegram/) (decrypts the account's bot token and calls `sendMessage` on the Bot API).
 
 [Telegram Bot API](https://core.telegram.org/bots/api) delivers
 inbound messages to a webhook you register via `setWebhook`. Each

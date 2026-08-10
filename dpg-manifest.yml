@@ -95,9 +95,41 @@ implementations:
         path: implementations/webhook-go/deploy/terraform/aws
         description: >-
           Minimal ECS Fargate + ALB + SQS reference module. Reviewable
-          in one sitting; adapters should read the module README before
+          in one sitting; adopters should read the module README before
           applying (default VPC / public subnets are used only so a
           first-time apply works out of the box).
+  - name: channels-go
+    language: Go
+    path: implementations/channels-go
+    description: >-
+      Routing brain. Owns the Postgres 16 + PostGIS schema. Accepts
+      canonical messages from the webhook, resolves senders to contacts,
+      runs the rule-based command parser, scores confidence, applies the
+      policy gate (execute / echo back / clarify / drop), persists every
+      message, dispatches outbound replies through platform integrations
+      (UltraMSG WhatsApp, Twilio SMS+WhatsApp, Telegram, AWS SES v2
+      email), and fires workflow webhooks to downstream consumer
+      products. Per-account platform credentials are encrypted at rest
+      via a pluggable Encryptor (AES-256-GCM locally, AWS KMS in prod).
+    runnable: docker compose up --build
+    deployment:
+      - kind: docker-compose
+        path: implementations/channels-go/docker-compose.yml
+      - kind: docker-compose
+        path: docker-compose.yml
+        description: >-
+          Root docker-compose bringing up the full stack —
+          webhook + channels + Postgres + LocalStack SQS — wired
+          end-to-end. This is the single-command demo of the entire
+          openkit.
+      - kind: terraform-aws
+        path: implementations/channels-go/deploy/terraform/aws
+        description: >-
+          Aurora Postgres (Serverless v2) + ECS Fargate + ALB +
+          customer-managed KMS key + Secrets Manager. Reviewable
+          in one sitting; adopters must read the module README
+          before applying (DB config in particular is set for a
+          reference apply, not for a hardened production database).
 
 # Non-collection of PII: the schema is designed to minimize collection to
 # only what the source platform delivered. See docs/dpg-alignment.md

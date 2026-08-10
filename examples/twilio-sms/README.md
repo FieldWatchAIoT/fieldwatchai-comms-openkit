@@ -2,7 +2,10 @@
 
 **Adapter ids:** `sms-twilio`, `whatsapp-twilio`
 **Canonical platforms:** `sms`, `whatsapp`
-**Status:** shipped. Working listener at [`implementations/webhook-go/internal/listeners/twilio/`](../../implementations/webhook-go/internal/listeners/twilio/).
+**Status:** shipped both directions.
+
+- **Inbound listener** — [`implementations/webhook-go/internal/listeners/twilio/`](../../implementations/webhook-go/internal/listeners/twilio/) (verifies `X-Twilio-Signature` HMAC against the full public URL, parses Twilio's form-encoded webhook, emits a canonical message).
+- **Outbound integration** — [`implementations/channels-go/internal/integrations/twilio/`](../../implementations/channels-go/internal/integrations/twilio/) (decrypts the account's Twilio credentials and POSTs to `Messages.json`; the `whatsapp:` scheme on `From`/`To` selects the WhatsApp lane).
 
 [Twilio](https://www.twilio.com/) is one of the two adapters in this
 starter set that talks to real telco routes: it delivers SMS to
