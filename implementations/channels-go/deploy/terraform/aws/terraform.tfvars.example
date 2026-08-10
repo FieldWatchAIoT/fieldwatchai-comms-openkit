@@ -1,0 +1,62 @@
+##################################################################
+# comms-openkit channels — example tfvars
+##################################################################
+# Copy to terraform.tfvars (gitignored) and fill in real values.
+
+aws_region   = "us-west-2"
+service_name = "comms-openkit-channels"
+
+# ---- container image (build + push before apply) ----------------
+container_image = "123456789012.dkr.ecr.us-west-2.amazonaws.com/comms-openkit-channels:v0.1.0"
+
+# ---- networking -------------------------------------------------
+# Leave empty to use the account's default VPC + default subnets.
+# For prod: pass your own VPC, put tasks in PRIVATE subnets, and put the DB
+# in ISOLATED private subnets with no public route.
+vpc_id            = ""
+public_subnet_ids = []
+db_subnet_ids     = []
+
+# ---- TLS --------------------------------------------------------
+# ACM certificate ARN in the same region as aws_region. Required.
+certificate_arn = "arn:aws:acm:us-west-2:123456789012:certificate/REPLACE-ME"
+
+# ---- Aurora Postgres --------------------------------------------
+db_engine_version         = "16.4"
+db_master_username        = "openkit"
+# Leave db_master_password = "" to auto-generate a strong password stored in
+# Secrets Manager as <service_name>-db-password. Fargate injects it as
+# DB_PASSWORD. For prod: pre-create your own secret and pass this variable
+# from your own Vault / Secrets Manager pipeline.
+db_master_password        = ""
+db_name                   = "openkit"
+db_min_capacity           = 0.5
+db_max_capacity           = 2
+db_backup_retention_days  = 7
+
+# ---- app secrets (Secrets Manager ARNs) --------------------------
+# Must MATCH the webhook's INTERNAL_API_TOKEN so /v1/ingest authenticates.
+internal_api_token_secret_arn = "arn:aws:secretsmanager:us-west-2:123456789012:secret:comms/internal_api_token-XXXXXX"
+
+# Optional globals for outbound integrations. Per-tenant platform credentials
+# live in the DB, encrypted by the KMS key this module creates.
+platform_secret_arn_map = {
+  # TWILIO_ACCOUNT_SID = "arn:aws:secretsmanager:us-west-2:123456789012:secret:comms/twilio-sid-XXXXXX"
+  # TWILIO_AUTH_TOKEN  = "arn:aws:secretsmanager:us-west-2:123456789012:secret:comms/twilio-token-XXXXXX"
+}
+
+# ---- non-secret env vars ----------------------------------------
+extra_env = {
+  # ULTRAMSG_INSTANCE_ID = "instance123"
+}
+
+# ---- sizing -----------------------------------------------------
+task_cpu      = 512
+task_memory   = 1024
+desired_count = 2
+
+# ---- tags -------------------------------------------------------
+tags = {
+  Environment = "prod"
+  Owner       = "your-team"
+}
