@@ -2,7 +2,7 @@
 
 **Adapter ids:** `sms-twilio`, `whatsapp-twilio`
 **Canonical platforms:** `sms`, `whatsapp`
-**Status:** starter README. Reference implementation code coming **Q4 2026**.
+**Status:** shipped. Working listener at [`implementations/webhook-go/internal/listeners/twilio/`](../../implementations/webhook-go/internal/listeners/twilio/).
 
 [Twilio](https://www.twilio.com/) is one of the two adapters in this
 starter set that talks to real telco routes: it delivers SMS to

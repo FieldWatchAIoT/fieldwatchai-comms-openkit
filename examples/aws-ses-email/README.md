@@ -2,7 +2,7 @@
 
 **Adapter id:** `email-ses`
 **Canonical platform:** `email`
-**Status:** starter README. Reference implementation code coming **Q4 2026**.
+**Status:** shipped. Working listener at [`implementations/webhook-go/internal/listeners/email/`](../../implementations/webhook-go/internal/listeners/email/).
 
 Inbound email over AWS Simple Email Service. This is the adapter that
 lets a disaster-management agency accept reports from anyone with an

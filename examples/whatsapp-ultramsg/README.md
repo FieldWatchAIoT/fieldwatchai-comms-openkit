@@ -2,7 +2,20 @@
 
 **Adapter id:** `whatsapp-ultramsg`
 **Canonical platform:** `whatsapp`
-**Status:** starter README. Reference implementation code coming **Q4 2026**.
+**Status:** shipped. Working listener at [`implementations/webhook-go/internal/listeners/ultramsg/`](../../implementations/webhook-go/internal/listeners/ultramsg/); captured test payloads at [`implementations/webhook-go/internal/listeners/ultramsg/testdata/`](../../implementations/webhook-go/internal/listeners/ultramsg/testdata/).
+
+Round-trip it end-to-end locally:
+
+```sh
+cd ../../implementations/webhook-go
+docker compose up --build
+# in another terminal:
+curl -X POST 'http://localhost:8080/inbound/whatsapp-ultramsg?token=local-secret' \
+     -H 'Content-Type: application/json' \
+     --data @internal/listeners/ultramsg/testdata/text.json
+```
+
+The rest of this README explains the platform-level shape of the adapter.
 
 [UltraMSG](https://ultramsg.com/) is a WhatsApp Business gateway that
 delivers inbound messages to a configured webhook and accepts outbound

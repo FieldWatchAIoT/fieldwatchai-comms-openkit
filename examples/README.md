@@ -10,19 +10,26 @@ platform's destination to a consumer account.
 
 ## What is here now
 
-| Adapter | Platform | Code | README |
-|---|---|---|---|
-| `whatsapp-ultramsg` | WhatsApp via [UltraMSG](https://ultramsg.com/) | coming Q4 2026 | [read](./whatsapp-ultramsg/README.md) |
-| `twilio-sms` | SMS + WhatsApp via [Twilio](https://www.twilio.com/) | coming Q4 2026 | [read](./twilio-sms/README.md) |
-| `telegram-bot` | Telegram via [Bot API](https://core.telegram.org/bots/api) | coming Q4 2026 | [read](./telegram-bot/README.md) |
-| `aws-ses-email` | Email via [AWS SES](https://aws.amazon.com/ses/) inbound | coming Q4 2026 | [read](./aws-ses-email/README.md) |
+Every adapter listed below now ships as a working listener inside the
+[Go reference implementation](../implementations/webhook-go/). These
+starter READMEs remain as the platform-level explanation (identity,
+verify, payload shape, gotchas) and point at the working code in
+`implementations/webhook-go/internal/listeners/<platform>/`.
 
-Each starter README today explains the shape of the adapter — the
-verify pattern, the payload shape, the account lookup — so an
-implementer can start writing against the transport-adapter contract
-before the reference code lands. When the reference code lands
-(target: Q4 2026), it will be added to the same folders alongside
-the READMEs.
+| Adapter | Platform | Working code | Starter README |
+|---|---|---|---|
+| `whatsapp-ultramsg` | WhatsApp via [UltraMSG](https://ultramsg.com/) | [`internal/listeners/ultramsg/`](../implementations/webhook-go/internal/listeners/ultramsg/) | [read](./whatsapp-ultramsg/README.md) |
+| `twilio-sms` | SMS + WhatsApp via [Twilio](https://www.twilio.com/) | [`internal/listeners/twilio/`](../implementations/webhook-go/internal/listeners/twilio/) | [read](./twilio-sms/README.md) |
+| `telegram-bot` | Telegram via [Bot API](https://core.telegram.org/bots/api) | [`internal/listeners/telegram/`](../implementations/webhook-go/internal/listeners/telegram/) | [read](./telegram-bot/README.md) |
+| `aws-ses-email` | Email via [AWS SES](https://aws.amazon.com/ses/) inbound | [`internal/listeners/email/`](../implementations/webhook-go/internal/listeners/email/) | [read](./aws-ses-email/README.md) |
+
+To try any of them:
+
+```sh
+cd implementations/webhook-go
+docker compose up --build
+# then curl the /inbound/<adapter-id> endpoint (see impl README for a walkthrough)
+```
 
 ## Coming on the roadmap
 

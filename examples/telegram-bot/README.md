@@ -2,7 +2,7 @@
 
 **Adapter id:** `telegram`
 **Canonical platform:** `telegram`
-**Status:** starter README. Reference implementation code coming **Q4 2026**.
+**Status:** shipped. Working listener at [`implementations/webhook-go/internal/listeners/telegram/`](../../implementations/webhook-go/internal/listeners/telegram/).
 
 [Telegram Bot API](https://core.telegram.org/bots/api) delivers
 inbound messages to a webhook you register via `setWebhook`. Each
