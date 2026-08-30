@@ -1,0 +1,158 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Both reference implementations are separate Go modules under
+  # implementations/, so vet + unit tests fan out over them rather than running
+  # once at the repo root.
+  unit:
+    name: vet + unit tests (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [webhook-go, channels-go]
+    defaults:
+      run:
+        working-directory: implementations/${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: implementations/${{ matrix.module }}/go.mod
+          cache-dependency-path: implementations/${{ matrix.module }}/go.sum
+
+      # A stale go.sum should fail here rather than surfacing as a confusing
+      # build error further down.
+      - name: go mod verify
+        run: go mod verify
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: unit tests
+        run: go test ./... -count=1
+
+  # The channels integration suite needs a live Postgres with PostGIS, and it is
+  # destructive — it runs `migrate down` and drops every table — so it gets a
+  # database of its own here, exactly as it does in docker-compose.
+  integration:
+    name: integration tests (channels-go)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: openkit
+          POSTGRES_PASSWORD: openkit
+          POSTGRES_DB: openkit_test
+        ports:
+          - 5434:5432
+        # -h 127.0.0.1 forces a TCP probe. Over the unix socket the entrypoint's
+        # temporary init server answers first and the service is called healthy
+        # before Postgres accepts TCP connections.
+        options: >-
+          --health-cmd "pg_isready -U openkit -d openkit_test -h 127.0.0.1"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    defaults:
+      run:
+        working-directory: implementations/channels-go
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: implementations/channels-go/go.mod
+          cache-dependency-path: implementations/channels-go/go.sum
+
+      # The schema tests shell out to the golang-migrate CLI and t.Skip() when
+      # it is absent — which would leave this job green having tested nothing.
+      # `make test-integration` fails fast if it is missing, but install it here
+      # so that guard never has to fire.
+      - name: install golang-migrate
+        run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
+
+      - name: integration tests
+        run: make test-integration
+        env:
+          FCC_TEST_DATABASE_URL: postgres://openkit:openkit@localhost:5434/openkit_test?sslmode=disable
+
+  # Proves the thing the README's quick start actually promises: one command
+  # brings the stack up and a synthetic WhatsApp payload lands in the database.
+  # This is the check that would have caught the cold-boot crash, the inert
+  # ACCOUNTS_MAP, and the missing seed rows.
+  e2e:
+    name: end-to-end demo stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: docker compose up
+        run: docker compose up -d --build
+
+      - name: wait for both services to report healthy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/healthz >/dev/null 2>&1 \
+            && curl -fsS http://localhost:9090/healthz >/dev/null 2>&1; then
+              echo "both services healthy after ${i}0s"; exit 0
+            fi
+            sleep 10
+          done
+          echo "services never became healthy"; docker compose ps -a; docker compose logs; exit 1
+
+      - name: seed must have completed
+        run: |
+          # The seed container exits 0 once the demo rows are in. A non-zero
+          # exit means the stack is up but the demo would silently drop
+          # messages, which is exactly the failure this job exists to catch.
+          code=$(docker compose ps -a --format '{{.ExitCode}}' seed)
+          echo "seed exit code: $code"
+          [ "$code" = "0" ] || { docker compose logs seed; exit 1; }
+
+      - name: send a synthetic WhatsApp payload
+        run: |
+          curl -fsS -X POST 'http://localhost:8080/inbound/whatsapp-ultramsg?token=local-secret' \
+            -H 'Content-Type: application/json' \
+            --data @implementations/webhook-go/internal/listeners/ultramsg/testdata/text.json
+
+      - name: it must reach the database, parsed and executed
+        run: |
+          # Poll: the webhook buffers to SQS and a worker drains it, so arrival
+          # is asynchronous. Assert on policy_action too — a row that landed as
+          # 'clarify' would mean short-id resolution silently regressed.
+          for i in $(seq 1 30); do
+            action=$(docker compose exec -T postgres psql -U openkit -d openkit -tAc \
+              "SELECT policy_action FROM messages WHERE body_text = '42 STATUS full' LIMIT 1;" 2>/dev/null | tr -d '[:space:]')
+            if [ -n "$action" ]; then
+              echo "message landed with policy_action=$action"
+              [ "$action" = "execute" ] || { echo "expected 'execute'"; exit 1; }
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "message never reached the database"
+          docker compose logs webhook channels
+          exit 1
+
+      - name: dump logs on failure
+        if: failure()
+        run: docker compose ps -a && docker compose logs
