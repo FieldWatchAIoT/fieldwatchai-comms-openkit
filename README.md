@@ -51,6 +51,8 @@ SQS — wired together end-to-end:
 - `channels` on `localhost:9090` — the routing brain (owns the DB)
 - `postgres` on `localhost:5434` — Postgres 16 + PostGIS
 - `localstack` on `localhost:4566` — SQS
+- `seed` — a one-shot container that inserts the demo tenant, account, and
+  contact, then exits (see [`deploy/seed/`](./deploy/seed/))
 
 Send a synthetic WhatsApp payload through the whole pipeline:
 
@@ -64,6 +66,68 @@ docker compose exec postgres \
   psql -U openkit -d openkit \
   -c 'SELECT direction, body_text, received_at FROM messages ORDER BY received_at DESC LIMIT 5;'
 ```
+
+You should get one `inbound` row reading `42 STATUS full`. To see what the
+routing brain actually decided about it:
+
+```sh
+docker compose exec postgres psql -U openkit -d openkit -c \
+  "SELECT policy_action, parsed->>'command' AS cmd, parsed->>'confidence' AS confidence
+     FROM messages ORDER BY received_at DESC LIMIT 1;"
+# policy_action | cmd    | confidence
+# execute       | STATUS | 1
+```
+
+`execute` means the parser read the command, the resolver matched short-id `42`
+to the seeded contact at full confidence, and the policy gate cleared it to run.
+Delete that contact and the same message comes back as `clarify` instead — that
+is the confidence gate doing its job, not a failure.
+
+### What the demo seeds, and why it is needed
+
+Every inbound message is resolved to an account before anything else happens: the
+webhook asks channels `GET /v1/accounts/lookup`, and a miss means the message is
+acknowledged and dropped. So an empty database silently discards everything. The
+`seed` service inserts three rows to get past that:
+
+| Row | Value | Why |
+|---|---|---|
+| tenant | `11111111-…-111111111111` | `accounts.tenant_id` is a foreign key; there is no tenant API |
+| account | type `whatsapp`, identifier `instance123` | matches the `instanceId` in the test payload |
+| contact | short-id `42` | makes the demo message resolve at full confidence |
+
+Two things routinely catch people out here:
+
+- **The account type is `whatsapp`, not `whatsapp-ultramsg`.** The webhook sends
+  its *listener id* (`whatsapp-ultramsg`) to the lookup, and channels maps that to
+  the stored *platform type* (`whatsapp`). Store the listener id and every lookup
+  misses, with no error anywhere.
+- **Tenants can only be created in SQL.** Tenancy is provisioned out of band, so
+  channels exposes no tenant endpoint. `POST /v1/accounts` against a tenant id
+  that does not exist fails the foreign key and returns a bare `internal_error`.
+
+Accounts and contacts *do* have a full CRUD API — the seed uses SQL only so it
+can create the tenant in the same round trip. The API equivalents:
+
+```sh
+curl -X POST http://localhost:9090/v1/accounts \
+  -H 'Authorization: Bearer local-token' \
+  -H 'X-Tenant-ID: 11111111-1111-1111-1111-111111111111' \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"whatsapp","owner_type":"tenant","label":"Demo WhatsApp",
+       "platform_identifier":"instance123","status":"active",
+       "capabilities":["inbound","outbound"]}'
+
+curl -X POST http://localhost:9090/v1/contacts \
+  -H 'Authorization: Bearer local-token' \
+  -H 'X-Tenant-ID: 11111111-1111-1111-1111-111111111111' \
+  -H 'Content-Type: application/json' \
+  -d '{"short_id":"42","display_name":"Marsh Harbour Shelter","status":"active"}'
+```
+
+Outbound replies need real platform credentials on the account
+(`credentials` on the create call). The seeded account has none, so inbound and
+routing work offline but an outbound send will fail until you add them.
 
 Want to run the two services individually instead? Each implementation folder
 has its own `docker-compose.yml` for isolated dev:
