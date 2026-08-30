@@ -19,6 +19,7 @@ import (
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/contacts"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/crypto"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/db"
+	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/diagnostics"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/httpapi"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/ingest"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/integrations/emailses"
@@ -32,6 +33,7 @@ import (
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/queries/goqueries"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/replay"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/resolver"
+	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/tenants"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/workflow"
 	"github.com/google/uuid"
 )
@@ -117,12 +119,19 @@ func main() {
 	// consumer never acknowledged (operator-triggered, not automatic).
 	forwarder := workflow.New()
 	replayHandler := replay.NewHandler(replay.NewService(queries, forwarder, logger), logger)
+	// Bootstrap + self-diagnosis. Without these an adopter starting from an
+	// empty database cannot create a tenant except in SQL, and cannot tell why
+	// a correctly-accepted message reached no consumer.
+	tenantHandler := tenants.NewHandler(tenants.NewService(queries), logger)
+	diagHandler := diagnostics.NewHandler(diagnostics.NewService(queries), logger)
 	acctHandler.RegisterRoutes(v1)
 	ingestHandler.RegisterRoutes(v1)
 	contactHandler.RegisterRoutes(v1)
 	outboundHandler.RegisterRoutes(v1)
 	channelHandler.RegisterRoutes(v1)
 	replayHandler.RegisterRoutes(v1)
+	tenantHandler.RegisterRoutes(v1)
+	diagHandler.RegisterRoutes(v1)
 	authed := httpapi.WithBearerAuth(cfg.InternalAPIToken, logger, v1)
 	srv.Mux().Handle("/v1/accounts", authed)
 	srv.Mux().Handle("/v1/accounts/", authed)
@@ -133,6 +142,9 @@ func main() {
 	srv.Mux().Handle("/v1/channels", authed)
 	srv.Mux().Handle("/v1/channels/", authed)
 	srv.Mux().Handle("/v1/workflows/replay", authed)
+	srv.Mux().Handle("/v1/tenants", authed)
+	srv.Mux().Handle("/v1/tenants/", authed)
+	srv.Mux().Handle("/v1/diagnostics", authed)
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
