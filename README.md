@@ -63,10 +63,6 @@ Read this part before you plan around it.
   and it is not a life-safety system of record on its own.
 - **It does not host or analyze media.** Photos and documents are passed
   through as links to the platform's own storage.
-- **Some setup is still SQL-only.** Accounts and contacts have a full API;
-  creating a tenant, or a channel with its forwarding URL, currently means
-  writing to the database directly. See the
-  [channels README](./implementations/channels-go/README.md#http-surface).
 - **No satellite or voice yet.** Satellite messengers (for when the towers are
   down) and voice are on the roadmap, not in the box.
 
@@ -203,6 +199,60 @@ has its own `docker-compose.yml` for isolated dev:
   a `fakechannels` stub, no DB
 - [`implementations/channels-go/`](./implementations/channels-go/) — channels +
   Postgres, no webhook
+
+## Setting up your own deployment
+
+The demo seeds itself. For a real deployment — your own WhatsApp number, your
+own address book — one command wires everything:
+
+```sh
+cd implementations/channels-go
+make setup
+```
+
+It asks for your platform details and creates the four things a working
+deployment needs, in order: a **tenant**, an **account** (the inbox messages
+arrive on), a **channel** (where traffic is routed, and what carries your
+`workflow_url`), and the **link** between account and channel. Then it verifies
+the result and prints the ids you will need.
+
+That last step matters more than it sounds. An account with no channel link
+still accepts messages, parses them, and stores them — it just forwards them
+nowhere, silently, returning `200` the whole time. It is the single most common
+way a new deployment appears to work while doing nothing.
+
+You can ask the service about that state at any time:
+
+```sh
+curl -s localhost:9090/v1/diagnostics \
+  -H 'Authorization: Bearer local-token' \
+  -H 'X-Tenant-ID: <your-tenant-id>'
+```
+
+It reports what exists and names what is missing, with the command to fix each
+one:
+
+```json
+{
+  "healthy": false,
+  "counts": { "accounts": 1, "channels": 0, "contacts": 0, "messages": 0 },
+  "findings": [
+    {
+      "severity": "blocking",
+      "code": "account_not_linked_to_channel",
+      "summary": "Account \"Demo WhatsApp\" (whatsapp instance123) is not linked to any inbound channel. Messages arriving on it are stored and forwarded nowhere.",
+      "remedy": "POST /v1/channels to create a channel, then POST /v1/channels/{id}/accounts with account_id=... and direction=\"both\"."
+    }
+  ]
+}
+```
+
+`blocking` means traffic is being discarded or stranded. `warning` means it
+flows but something downstream is missing — a channel with no `workflow_url` is
+perfectly valid if you read the database directly.
+
+Everything `make setup` does is an ordinary API call, so you can script it
+instead. No step requires SQL.
 
 For a real deployment, each implementation ships a Terraform module:
 
