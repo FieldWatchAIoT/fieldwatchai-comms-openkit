@@ -1,6 +1,8 @@
 # FieldWatch Comms OpenKit
 
-**An open protocol and reference implementations for disaster-response communications infrastructure.**
+**A switchboard for disaster-response messaging.** Field reports arrive over
+WhatsApp, SMS, Telegram, or email; they come out the other side as one stream of
+structured, permanently recorded messages your own systems can read.
 
 Built in the Bahamas by [FieldWatch AI](https://fieldwatch.earth/). Licensed Apache 2.0. Being prepared as a Digital Public Good.
 
@@ -8,11 +10,71 @@ Built in the Bahamas by [FieldWatch AI](https://fieldwatch.earth/). Licensed Apa
 
 ## What this is
 
-The Comms OpenKit is:
+In a disaster, people use whatever still has signal and whatever is already on
+their phone. You cannot make a frightened person in a flooded house install a
+new app. So responders end up spread across WhatsApp, SMS, email, Telegram, and
+paper, unable to see each other's traffic.
+
+This project takes the opposite approach: **let everyone keep the app they
+already have, and put the switchboard behind them.** Every message lands in one
+place, in one format, in one permanent record.
+
+The closest everyday analogy is email. You have never had to care whether the
+person you are writing to uses Gmail or Outlook — the message simply arrives.
+This does that for disaster traffic.
+
+### What happens to a single message
+
+A shelter manager texts **`42 STATUS full`** over WhatsApp:
+
+| Step | What happens |
+|---|---|
+| **Arrives** | The sender is verified before anything else — an HMAC signature where the platform offers one (Twilio), a constant-time shared-secret check where it does not (UltraMSG, Telegram, SES). Verification is fail-closed. |
+| **Translated** | WhatsApp, SMS, Telegram, and email deliver wildly different payloads. Each is rewritten into one [canonical message](./spec/canonical-message.md), so everything downstream sees the same shape. |
+| **Understood** | `42` is looked up in the address book — Marsh Harbour Shelter. `STATUS` is the command. `full` is the detail. |
+| **Judged** | The match is scored. Exact hit here, so it passes straight through as `execute`. |
+| **Filed** | Stored permanently: the original payload, the timestamp, and what the system understood. |
+| **Handed off** | Posted to whatever system you already run — your dashboard, your map, your database. |
+
+**When it is not sure, it does not guess.** On a partial match it replies
+*"Did you mean Marsh Harbour Shelter?"* and waits. The sender can confirm,
+correct, or text `OOPS` to cancel what they just sent, within a time window you
+set. A confident wrong guess sends a boat to the wrong island; asking is
+cheaper than being wrong.
+
+Relatedly, and deliberately: **no AI decides what a message means.** Parsing is
+rule-based and deterministic, so the same message always resolves the same way.
+There is an [AI-teammate protocol](./spec/ai-teammate-protocol.md) for AI
+participants, and it is constrained — silent by default, summoned only,
+read-only, always yielding to humans.
+
+## What this is NOT
+
+Read this part before you plan around it.
+
+- **It is not an app. There are no screens.** Nothing for a coordinator to log
+  into, no dashboard, no map view. This is the plumbing that sits underneath
+  one. Everything here is an HTTP API and a database.
+- **It is not turnkey.** Adopting it requires a developer — someone who can run
+  containers, hold a Postgres database, and build the interface your staff will
+  actually use. Budget for that before committing.
+- **It is not a replacement for radio or official alerting.** It handles
+  two-way field traffic. It does not do public warning broadcast (CAP/CBC),
+  and it is not a life-safety system of record on its own.
+- **It does not host or analyze media.** Photos and documents are passed
+  through as links to the platform's own storage.
+- **Some setup is still SQL-only.** Accounts and contacts have a full API;
+  creating a tenant, or a channel with its forwarding URL, currently means
+  writing to the database directly. See the
+  [channels README](./implementations/channels-go/README.md#http-surface).
+- **No satellite or voice yet.** Satellite messengers (for when the towers are
+  down) and voice are on the roadmap, not in the box.
+
+## What you get
 
 1. **A specification** — the message schema, command grammar, transport adapter contract, and AI-teammate protocol that FieldWatch's own comms hub runs on.
-2. **A set of reference implementations** — starter code showing how to plug WhatsApp, SMS, Telegram, email, and (roadmap) satellite messengers into a disaster-response comms stack.
-3. **A deployment recipe** — how any disaster-management agency in a small island developing state (SIDS) can stand up the same coordination surface FieldWatch runs, on their own infrastructure, without licensing a commercial product.
+2. **Two working Go services** — an inbound receiver and a routing brain, extracted from that same production codebase. Not pseudocode; they run.
+3. **A deployment recipe** — docker-compose for a laptop, Terraform for AWS, so an agency can stand up the same coordination surface on infrastructure it owns.
 
 Any group — a National Emergency Management Agency (NEMA), a Red Cross chapter, a mutual-aid network, a private search-and-rescue team — can implement the spec and interoperate with the reference stack.
 
@@ -33,6 +95,11 @@ The Comms OpenKit is an attempt to close that gap with open protocol and open co
 - **Disaster-response NGOs** — Red Cross societies, mutual-aid networks, search-and-rescue teams — that need to interoperate across radios, WhatsApp, SMS, Telegram, email, and satellite messengers without a proprietary hub.
 - **Developers** building communications tools for climate-vulnerable communities who want a reference protocol to interoperate against.
 - **Researchers and standards bodies** working on humanitarian communications interoperability.
+
+Every one of those routes through a developer. The people this ultimately
+serves — the shelter manager texting `42 STATUS full`, the family reporting
+someone missing — never touch this repository and never know it exists. That is
+the intended outcome, not a gap.
 
 ## Quick start — full stack in one command
 
