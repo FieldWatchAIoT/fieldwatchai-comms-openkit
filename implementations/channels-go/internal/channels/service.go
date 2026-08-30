@@ -2,12 +2,16 @@ package channels
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/queries/goqueries"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // Service holds channel-routing logic: tenant scoping and link validation.
@@ -120,4 +124,169 @@ func (s *Service) Unlink(ctx context.Context, channelID, accountID, tenantID uui
 		return ErrNotFound
 	}
 	return nil
+}
+
+// Create makes a channel. Only Name is required; every other field falls back
+// to the same defaults ingest already applies to an unlinked account, so a
+// caller who supplies nothing else gets a channel that behaves exactly as the
+// system did before they created it — plus somewhere to hang a workflow_url.
+func (s *Service) Create(ctx context.Context, in CreateInput, now func() time.Time, newID func() uuid.UUID) (Channel, error) {
+	if strings.TrimSpace(in.Name) == "" {
+		return Channel{}, fmt.Errorf("%w: name is required", ErrInvalid)
+	}
+	if in.ReplyPolicy == "" {
+		in.ReplyPolicy = DefaultReplyPolicy
+	}
+	if !validReplyPolicies[in.ReplyPolicy] {
+		return Channel{}, fmt.Errorf("%w: reply_policy must be reply_to_sender, broadcast or custom", ErrInvalid)
+	}
+	if len(in.ParserConfig) == 0 {
+		cfg, err := json.Marshal(map[string]any{"mode": "structured", "commands": DefaultCommands})
+		if err != nil {
+			return Channel{}, fmt.Errorf("build default parser config: %w", err)
+		}
+		in.ParserConfig = cfg
+	}
+	if err := validateParserConfig(in.ParserConfig); err != nil {
+		return Channel{}, err
+	}
+	if len(in.ConfidenceThresholds) == 0 {
+		in.ConfidenceThresholds = DefaultConfidenceThresholds
+	}
+	if err := validateThresholds(in.ConfidenceThresholds); err != nil {
+		return Channel{}, err
+	}
+
+	echo := true
+	if in.EchoBackEnabled != nil {
+		echo = *in.EchoBackEnabled
+	}
+	recall := DefaultRecallWindowSeconds
+	if in.RecallWindowSeconds != nil {
+		recall = *in.RecallWindowSeconds
+	}
+
+	row, err := s.store.CreateChannel(ctx, goqueries.CreateChannelParams{
+		ID:                   newID(),
+		TenantID:             in.TenantID,
+		Name:                 in.Name,
+		ParserConfig:         in.ParserConfig,
+		WorkflowUrl:          pgtype.Text{String: in.WorkflowURL, Valid: in.WorkflowURL != ""},
+		ReplyPolicy:          in.ReplyPolicy,
+		ConfidenceThresholds: in.ConfidenceThresholds,
+		EchoBackEnabled:      echo,
+		RecallWindowSeconds:  recall,
+		CreatedAt:            now().UTC(),
+	})
+	if err != nil {
+		return Channel{}, fmt.Errorf("create channel: %w", err)
+	}
+	return toAPI(row), nil
+}
+
+// Update applies a partial change, scoped to the tenant. Absent fields are left
+// alone so setting a workflow_url does not require restating the parser config.
+func (s *Service) Update(ctx context.Context, id, tenantID uuid.UUID, in UpdateInput) (Channel, error) {
+	if in.Name != nil && strings.TrimSpace(*in.Name) == "" {
+		return Channel{}, fmt.Errorf("%w: name cannot be empty", ErrInvalid)
+	}
+	if in.ReplyPolicy != nil && !validReplyPolicies[*in.ReplyPolicy] {
+		return Channel{}, fmt.Errorf("%w: reply_policy must be reply_to_sender, broadcast or custom", ErrInvalid)
+	}
+	if len(in.ParserConfig) > 0 {
+		if err := validateParserConfig(in.ParserConfig); err != nil {
+			return Channel{}, err
+		}
+	}
+	if len(in.ConfidenceThresholds) > 0 {
+		if err := validateThresholds(in.ConfidenceThresholds); err != nil {
+			return Channel{}, err
+		}
+	}
+
+	row, err := s.store.UpdateChannel(ctx, goqueries.UpdateChannelParams{
+		ID:                   id,
+		TenantID:             tenantID,
+		Name:                 textPtr(in.Name),
+		ParserConfig:         in.ParserConfig,
+		WorkflowUrl:          textPtr(in.WorkflowURL),
+		ReplyPolicy:          textPtr(in.ReplyPolicy),
+		ConfidenceThresholds: in.ConfidenceThresholds,
+		EchoBackEnabled:      boolPtr(in.EchoBackEnabled),
+		RecallWindowSeconds:  int4Ptr(in.RecallWindowSeconds),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Channel{}, ErrNotFound
+		}
+		return Channel{}, fmt.Errorf("update channel: %w", err)
+	}
+	return toAPI(row), nil
+}
+
+// validateParserConfig rejects a config ingest would silently misread. An
+// unknown mode is the dangerous one: ingest treats anything that is not
+// "passthrough" as the command grammar, so a typo like "passthru" would quietly
+// run the wrong pipeline over live traffic.
+func validateParserConfig(raw json.RawMessage) error {
+	var cfg struct {
+		Mode     string   `json:"mode"`
+		Commands []string `json:"commands"`
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return fmt.Errorf("%w: parser_config must be a JSON object", ErrInvalid)
+	}
+	if cfg.Mode != "" && !validModes[cfg.Mode] {
+		return fmt.Errorf("%w: parser_config.mode must be structured or passthrough", ErrInvalid)
+	}
+	return nil
+}
+
+// validateThresholds rejects thresholds that would make the policy gate
+// nonsensical — medium above high inverts the echo-back band.
+func validateThresholds(raw json.RawMessage) error {
+	var t struct {
+		High   *float64 `json:"high"`
+		Medium *float64 `json:"medium"`
+	}
+	if err := json.Unmarshal(raw, &t); err != nil {
+		return fmt.Errorf("%w: confidence_thresholds must be a JSON object", ErrInvalid)
+	}
+	if t.High == nil || t.Medium == nil {
+		return fmt.Errorf("%w: confidence_thresholds needs both high and medium", ErrInvalid)
+	}
+	// Checked in a fixed order so the error a caller sees is deterministic.
+	for _, f := range []struct {
+		name string
+		val  float64
+	}{{"high", *t.High}, {"medium", *t.Medium}} {
+		if f.val < 0 || f.val > 1 {
+			return fmt.Errorf("%w: confidence_thresholds.%s must be between 0 and 1", ErrInvalid, f.name)
+		}
+	}
+	if *t.Medium > *t.High {
+		return fmt.Errorf("%w: confidence_thresholds.medium cannot exceed high", ErrInvalid)
+	}
+	return nil
+}
+
+func textPtr(s *string) pgtype.Text {
+	if s == nil {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: *s, Valid: true}
+}
+
+func boolPtr(b *bool) pgtype.Bool {
+	if b == nil {
+		return pgtype.Bool{}
+	}
+	return pgtype.Bool{Bool: *b, Valid: true}
+}
+
+func int4Ptr(i *int32) pgtype.Int4 {
+	if i == nil {
+		return pgtype.Int4{}
+	}
+	return pgtype.Int4{Int32: *i, Valid: true}
 }

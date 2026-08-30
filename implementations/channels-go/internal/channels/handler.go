@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -17,29 +18,113 @@ type serviceAPI interface {
 	ListLinks(ctx context.Context, channelID, tenantID uuid.UUID) ([]Link, error)
 	Link(ctx context.Context, in LinkInput) (Link, error)
 	Unlink(ctx context.Context, channelID, accountID, tenantID uuid.UUID) error
+	Create(ctx context.Context, in CreateInput, now func() time.Time, newID func() uuid.UUID) (Channel, error)
+	Update(ctx context.Context, id, tenantID uuid.UUID, in UpdateInput) (Channel, error)
 }
 
 // Handler serves the /v1/channels routes.
 type Handler struct {
 	svc    serviceAPI
 	logger *slog.Logger
+	now    func() time.Time
+	newID  func() uuid.UUID
 }
 
 // NewHandler constructs a channels HTTP handler.
 func NewHandler(svc serviceAPI, logger *slog.Logger) *Handler {
-	return &Handler{svc: svc, logger: logger}
+	return &Handler{svc: svc, logger: logger, now: time.Now, newID: uuid.New}
 }
 
 // RegisterRoutes mounts the routes on mux. Auth is applied by the caller.
-// Channels themselves are read-only here: creating one means choosing a parser
-// grammar and thresholds, which is deployment config rather than product data.
-// The links are writable, because that is the operation every consumer needs.
+//
+// Channels were read-only here on the grounds that a parser grammar and
+// thresholds are deployment config. In practice that made the first run a trap:
+// with no channel there is no workflow_url, so an account accepts traffic and
+// forwards it nowhere, silently, and the only fix was hand-written SQL. Create
+// and update are here now, with defaults that match what ingest already does.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/channels", h.list)
+	mux.HandleFunc("POST /v1/channels", h.create)
 	mux.HandleFunc("GET /v1/channels/{id}", h.get)
+	mux.HandleFunc("PATCH /v1/channels/{id}", h.update)
 	mux.HandleFunc("GET /v1/channels/{id}/accounts", h.listLinks)
 	mux.HandleFunc("POST /v1/channels/{id}/accounts", h.link)
 	mux.HandleFunc("DELETE /v1/channels/{id}/accounts/{account_id}", h.unlink)
+}
+
+type createRequest struct {
+	Name                 string          `json:"name"`
+	ParserConfig         json.RawMessage `json:"parser_config"`
+	WorkflowURL          string          `json:"workflow_url"`
+	ReplyPolicy          string          `json:"reply_policy"`
+	ConfidenceThresholds json.RawMessage `json:"confidence_thresholds"`
+	EchoBackEnabled      *bool           `json:"echo_back_enabled"`
+	RecallWindowSeconds  *int32          `json:"recall_window_seconds"`
+}
+
+type updateRequest struct {
+	Name                 *string         `json:"name"`
+	ParserConfig         json.RawMessage `json:"parser_config"`
+	WorkflowURL          *string         `json:"workflow_url"`
+	ReplyPolicy          *string         `json:"reply_policy"`
+	ConfidenceThresholds json.RawMessage `json:"confidence_thresholds"`
+	EchoBackEnabled      *bool           `json:"echo_back_enabled"`
+	RecallWindowSeconds  *int32          `json:"recall_window_seconds"`
+}
+
+func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
+	tenant, ok := tenantOf(w, r)
+	if !ok {
+		return
+	}
+	var req createRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	ch, err := h.svc.Create(r.Context(), CreateInput{
+		TenantID:             tenant,
+		Name:                 req.Name,
+		ParserConfig:         req.ParserConfig,
+		WorkflowURL:          req.WorkflowURL,
+		ReplyPolicy:          req.ReplyPolicy,
+		ConfidenceThresholds: req.ConfidenceThresholds,
+		EchoBackEnabled:      req.EchoBackEnabled,
+		RecallWindowSeconds:  req.RecallWindowSeconds,
+	}, h.now, h.newID)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, ch)
+}
+
+func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
+	tenant, ok := tenantOf(w, r)
+	if !ok {
+		return
+	}
+	id, ok := idOf(w, r, "id")
+	if !ok {
+		return
+	}
+	var req updateRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	ch, err := h.svc.Update(r.Context(), id, tenant, UpdateInput{
+		Name:                 req.Name,
+		ParserConfig:         req.ParserConfig,
+		WorkflowURL:          req.WorkflowURL,
+		ReplyPolicy:          req.ReplyPolicy,
+		ConfidenceThresholds: req.ConfidenceThresholds,
+		EchoBackEnabled:      req.EchoBackEnabled,
+		RecallWindowSeconds:  req.RecallWindowSeconds,
+	})
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ch)
 }
 
 type linkRequest struct {
@@ -170,7 +255,10 @@ func (h *Handler) fail(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "not_found"})
 	case errors.Is(err, ErrInvalid):
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid"})
+		// Return the detail, not a bare "invalid": these messages are written
+		// for the operator setting the channel up, and withholding them turns
+		// configuration into guesswork.
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid", "detail": err.Error()})
 	default:
 		h.logger.Error("channels handler error", "event", "channels.error", "error", err.Error())
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "internal_error"})

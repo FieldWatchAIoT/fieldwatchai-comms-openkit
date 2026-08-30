@@ -1,4 +1,4 @@
-.PHONY: help test test-integration vet build run docker-build smoke sqlc migrate-up migrate-down tidy
+.PHONY: help setup test test-integration vet build run docker-build smoke sqlc migrate-up migrate-down tidy
 
 IMAGE ?= comms-openkit-channels:dev
 # In sandboxed shells with no module proxy, prepend:
@@ -7,6 +7,9 @@ GO ?= go
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+setup: ## Interactive first-run setup (tenant + account + channel + link)
+	@bash ../../deploy/setup/setup.sh
 
 test: ## Run unit tests
 	$(GO) test ./... -count=1

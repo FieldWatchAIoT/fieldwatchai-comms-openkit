@@ -8,10 +8,68 @@ package goqueries
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const createChannel = `-- name: CreateChannel :one
+INSERT INTO channels (
+  id, tenant_id, name, parser_config, workflow_url, reply_policy,
+  confidence_thresholds, echo_back_enabled, recall_window_seconds, created_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, tenant_id, name, parser_config, workflow_url, reply_policy,
+          confidence_thresholds, echo_back_enabled, recall_window_seconds,
+          audit_retention_years, created_at
+`
+
+type CreateChannelParams struct {
+	ID                   uuid.UUID       `db:"id" json:"id"`
+	TenantID             uuid.UUID       `db:"tenant_id" json:"tenant_id"`
+	Name                 string          `db:"name" json:"name"`
+	ParserConfig         json.RawMessage `db:"parser_config" json:"parser_config"`
+	WorkflowUrl          pgtype.Text     `db:"workflow_url" json:"workflow_url"`
+	ReplyPolicy          string          `db:"reply_policy" json:"reply_policy"`
+	ConfidenceThresholds json.RawMessage `db:"confidence_thresholds" json:"confidence_thresholds"`
+	EchoBackEnabled      bool            `db:"echo_back_enabled" json:"echo_back_enabled"`
+	RecallWindowSeconds  int32           `db:"recall_window_seconds" json:"recall_window_seconds"`
+	CreatedAt            time.Time       `db:"created_at" json:"created_at"`
+}
+
+// Create a routing channel. Until this existed the row could only be written by
+// hand in SQL, which meant a new deployment silently forwarded nothing: with no
+// channel there is no workflow_url, and ingest falls back to defaults.
+func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) (Channel, error) {
+	row := q.db.QueryRow(ctx, createChannel,
+		arg.ID,
+		arg.TenantID,
+		arg.Name,
+		arg.ParserConfig,
+		arg.WorkflowUrl,
+		arg.ReplyPolicy,
+		arg.ConfidenceThresholds,
+		arg.EchoBackEnabled,
+		arg.RecallWindowSeconds,
+		arg.CreatedAt,
+	)
+	var i Channel
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Name,
+		&i.ParserConfig,
+		&i.WorkflowUrl,
+		&i.ReplyPolicy,
+		&i.ConfidenceThresholds,
+		&i.EchoBackEnabled,
+		&i.RecallWindowSeconds,
+		&i.AuditRetentionYears,
+		&i.CreatedAt,
+	)
+	return i, err
+}
 
 const getChannelForTenant = `-- name: GetChannelForTenant :one
 SELECT id, tenant_id, name, parser_config, workflow_url, reply_policy,
@@ -254,4 +312,62 @@ func (q *Queries) UnlinkAccountFromChannel(ctx context.Context, arg UnlinkAccoun
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const updateChannel = `-- name: UpdateChannel :one
+UPDATE channels
+SET name                  = COALESCE($1, name),
+    parser_config         = COALESCE($2, parser_config),
+    workflow_url          = COALESCE($3, workflow_url),
+    reply_policy          = COALESCE($4, reply_policy),
+    confidence_thresholds = COALESCE($5, confidence_thresholds),
+    echo_back_enabled     = COALESCE($6, echo_back_enabled),
+    recall_window_seconds = COALESCE($7, recall_window_seconds)
+WHERE id = $8 AND tenant_id = $9
+RETURNING id, tenant_id, name, parser_config, workflow_url, reply_policy,
+          confidence_thresholds, echo_back_enabled, recall_window_seconds,
+          audit_retention_years, created_at
+`
+
+type UpdateChannelParams struct {
+	Name                 pgtype.Text `db:"name" json:"name"`
+	ParserConfig         []byte      `db:"parser_config" json:"parser_config"`
+	WorkflowUrl          pgtype.Text `db:"workflow_url" json:"workflow_url"`
+	ReplyPolicy          pgtype.Text `db:"reply_policy" json:"reply_policy"`
+	ConfidenceThresholds []byte      `db:"confidence_thresholds" json:"confidence_thresholds"`
+	EchoBackEnabled      pgtype.Bool `db:"echo_back_enabled" json:"echo_back_enabled"`
+	RecallWindowSeconds  pgtype.Int4 `db:"recall_window_seconds" json:"recall_window_seconds"`
+	ID                   uuid.UUID   `db:"id" json:"id"`
+	TenantID             uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+}
+
+// Partial update: a NULL argument leaves the column untouched, so a caller can
+// set workflow_url without restating the parser config.
+func (q *Queries) UpdateChannel(ctx context.Context, arg UpdateChannelParams) (Channel, error) {
+	row := q.db.QueryRow(ctx, updateChannel,
+		arg.Name,
+		arg.ParserConfig,
+		arg.WorkflowUrl,
+		arg.ReplyPolicy,
+		arg.ConfidenceThresholds,
+		arg.EchoBackEnabled,
+		arg.RecallWindowSeconds,
+		arg.ID,
+		arg.TenantID,
+	)
+	var i Channel
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Name,
+		&i.ParserConfig,
+		&i.WorkflowUrl,
+		&i.ReplyPolicy,
+		&i.ConfidenceThresholds,
+		&i.EchoBackEnabled,
+		&i.RecallWindowSeconds,
+		&i.AuditRetentionYears,
+		&i.CreatedAt,
+	)
+	return i, err
 }
