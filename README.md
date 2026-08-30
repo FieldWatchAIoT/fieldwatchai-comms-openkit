@@ -52,9 +52,11 @@ read-only, always yielding to humans.
 
 Read this part before you plan around it.
 
-- **It is not an app. There are no screens.** Nothing for a coordinator to log
-  into, no dashboard, no map view. This is the plumbing that sits underneath
-  one. Everything here is an HTTP API and a database.
+- **It is not an operator app.** There is a small read-only console at
+  `/console` for confirming traffic is arriving and being understood — no map
+  view, no case management, nothing a coordinator would run a response from.
+  This is the plumbing that sits underneath such a tool. Everything else is an
+  HTTP API and a database.
 - **It is not turnkey.** Adopting it requires a developer — someone who can run
   containers, hold a Postgres database, and build the interface your staff will
   actually use. Budget for that before committing.
@@ -116,6 +118,8 @@ SQS — wired together end-to-end:
 - `localstack` on `localhost:4566` — SQS
 - `seed` — a one-shot container that inserts the demo tenant, account, and
   contact, then exits (see [`deploy/seed/`](./deploy/seed/))
+
+Open **<http://localhost:9090/console>** to watch traffic arrive.
 
 Send a synthetic WhatsApp payload through the whole pipeline:
 
@@ -253,6 +257,27 @@ perfectly valid if you read the database directly.
 
 Everything `make setup` does is an ordinary API call, so you can script it
 instead. No step requires SQL.
+
+### Watching it work
+
+`http://localhost:9090/console` is a single read-only page showing whether the
+system is receiving, and what it made of each message:
+
+| Column | What it tells you |
+|---|---|
+| Message | Exactly what the sender typed |
+| Understood as | The short id and command the parser resolved, and how confident it was |
+| Outcome | `acted on`, `confirming`, `needs reply`, or `withdrawn` |
+| Your system | Whether the forward to your `workflow_url` was delivered |
+
+When something is misconfigured it says so in the same words as
+`/v1/diagnostics` — *"Account "Demo WhatsApp" is not linked to any inbound
+channel. Messages arriving on it are stored and forwarded nowhere"* — with the
+command to fix it.
+
+It loads no external resources: no CDN, no webfont, no framework. A console
+that needs the internet is broken exactly when it is needed most. It authenticates
+with the same `INTERNAL_API_TOKEN` as the API, held in the browser tab only.
 
 For a real deployment, each implementation ships a Terraform module:
 

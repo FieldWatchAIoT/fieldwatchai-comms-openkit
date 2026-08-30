@@ -88,3 +88,18 @@ LIMIT $3;
 -- original RFC Message-ID carried there).
 SELECT account_id, channel_id, tenant_id, sender_endpoint, sender_contact_id, raw_payload
 FROM messages WHERE id = $1;
+
+-- name: ListRecentMessagesForTenant :many
+-- Recent traffic for the console. Deliberately excludes raw_payload (the
+-- verbatim provider envelope, the largest and most sensitive column) and
+-- credentials never appear here at all — this feeds a read-only view whose
+-- whole job is letting an operator confirm that messages are arriving and being
+-- understood.
+SELECT m.id, m.direction, m.sender_endpoint, m.body_text, m.policy_action,
+       m.parsed, m.workflow_fired, m.received_at,
+       c.name AS channel_name
+FROM messages m
+LEFT JOIN channels c ON c.id = m.channel_id
+WHERE m.tenant_id = $1
+ORDER BY m.received_at DESC
+LIMIT $2;
