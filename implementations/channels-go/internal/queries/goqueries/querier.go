@@ -11,7 +11,21 @@ import (
 )
 
 type Querier interface {
+	// Queries behind GET /v1/diagnostics — the "why is nothing happening?" check.
+	//
+	// The failure these exist to surface is silent by construction: an account with
+	// no inbound channel link still accepts and stores messages, and forwards them
+	// nowhere. Nothing errors, the webhook returns 200, and the only evidence is one
+	// warning line in the channels container log. These turn that into a sentence.
+	CountAccountsForTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	CountChannelsForTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	CountContactsForTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	CountMessagesForTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error)
+	// Create a routing channel. Until this existed the row could only be written by
+	// hand in SQL, which meant a new deployment silently forwarded nothing: with no
+	// channel there is no workflow_url, and ingest falls back to defaults.
+	CreateChannel(ctx context.Context, arg CreateChannelParams) (Channel, error)
 	CreateContact(ctx context.Context, arg CreateContactParams) (Contact, error)
 	// Persist an inbound message. Idempotent on (account_id, platform_message_id):
 	// a duplicate inserts nothing and returns no row (the handler then treats it as
@@ -24,6 +38,12 @@ type Querier interface {
 	// Persist an outbound message (e.g. an echo-back), linked to the inbound it
 	// replies to.
 	CreateOutboundMessage(ctx context.Context, arg CreateOutboundMessageParams) (uuid.UUID, error)
+	// Bootstrap a tenant. Tenancy is provisioned out of band in FieldWatch's own
+	// deployment, but an adopter starting from an empty database has no other way
+	// in: accounts.tenant_id is a foreign key onto this table, so without a tenant
+	// row every POST /v1/accounts fails the constraint and returns a bare
+	// internal_error. Idempotent on id so a setup script can be re-run.
+	CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error)
 	DeleteAccount(ctx context.Context, arg DeleteAccountParams) (int64, error)
 	DeleteContact(ctx context.Context, arg DeleteContactParams) (int64, error)
 	// The most recent inbound message from this sender on this account that was
@@ -58,6 +78,7 @@ type Querier interface {
 	// /v1/outbound's recipient variant — unlike the reply path there is no prior
 	// message to inherit the endpoint/account from.
 	GetOutboundEndpointForContact(ctx context.Context, arg GetOutboundEndpointForContactParams) (GetOutboundEndpointForContactRow, error)
+	GetTenant(ctx context.Context, id uuid.UUID) (Tenant, error)
 	// Idempotent link: re-linking an already-linked account updates the routing
 	// fields rather than erroring, so a console can PUT the desired state.
 	LinkAccountToChannel(ctx context.Context, arg LinkAccountToChannelParams) (ChannelAccount, error)
@@ -72,9 +93,14 @@ type Querier interface {
 	// Surfacing it here is what stops that state from being invisible.
 	ListAccountsWithRoutingForTenant(ctx context.Context, tenantID uuid.UUID) ([]ListAccountsWithRoutingForTenantRow, error)
 	ListChannelsForTenant(ctx context.Context, tenantID uuid.UUID) ([]Channel, error)
+	// Channels that resolve inbound traffic but have nowhere to forward it to. Less
+	// severe than an unroutable account (parsing and storage still apply) but the
+	// consumer product never hears about the message.
+	ListChannelsWithoutWorkflow(ctx context.Context, tenantID uuid.UUID) ([]ListChannelsWithoutWorkflowRow, error)
 	// Lightweight projection for the resolver candidate set + short_id_check.
 	ListContactShortIDs(ctx context.Context, tenantID uuid.UUID) ([]ListContactShortIDsRow, error)
 	ListContactsForTenant(ctx context.Context, tenantID uuid.UUID) ([]Contact, error)
+	ListTenants(ctx context.Context) ([]Tenant, error)
 	// Inbound messages that should have reached a consumer and didn't:
 	// workflow_fired is still false, the channel has a workflow_url, and the policy
 	// gate decided to route them ('routed' on passthrough, 'execute' on structured).
@@ -82,6 +108,9 @@ type Querier interface {
 	// replay reconstructs from stored state rather than re-deriving it.
 	// Oldest first, so a consumer sees a replayed batch in the order it happened.
 	ListUnfiredForwards(ctx context.Context, arg ListUnfiredForwardsParams) ([]ListUnfiredForwardsRow, error)
+	// Accounts with no inbound-capable channel link. Every message arriving on one
+	// of these is stored and forwarded nowhere.
+	ListUnroutableAccounts(ctx context.Context, tenantID uuid.UUID) ([]ListUnroutableAccountsRow, error)
 	// Resolve an account by platform type + identifier (used by the webhook's
 	// account lookup). Returns only the ids — never credentials.
 	LookupAccount(ctx context.Context, arg LookupAccountParams) (LookupAccountRow, error)
@@ -92,6 +121,9 @@ type Querier interface {
 	Ping(ctx context.Context) (int32, error)
 	UnlinkAccountFromChannel(ctx context.Context, arg UnlinkAccountFromChannelParams) (int64, error)
 	UpdateAccount(ctx context.Context, arg UpdateAccountParams) (Account, error)
+	// Partial update: a NULL argument leaves the column untouched, so a caller can
+	// set workflow_url without restating the parser config.
+	UpdateChannel(ctx context.Context, arg UpdateChannelParams) (Channel, error)
 	UpdateContact(ctx context.Context, arg UpdateContactParams) (Contact, error)
 }
 

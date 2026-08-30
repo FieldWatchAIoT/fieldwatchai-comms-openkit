@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/policy"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/queries/goqueries"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -29,6 +32,10 @@ type fakeStore struct {
 	linkParams goqueries.LinkAccountToChannelParams
 	unlinkArg  goqueries.UnlinkAccountFromChannelParams
 	unlinkN    int64
+
+	createParams goqueries.CreateChannelParams
+	updateParams goqueries.UpdateChannelParams
+	updateErr    error
 }
 
 func (f *fakeStore) ListChannelsForTenant(_ context.Context, _ uuid.UUID) ([]goqueries.Channel, error) {
@@ -53,6 +60,22 @@ func (f *fakeStore) UnlinkAccountFromChannel(_ context.Context, p goqueries.Unli
 }
 func (f *fakeStore) ListAccountLinksForChannel(_ context.Context, _ uuid.UUID) ([]goqueries.ListAccountLinksForChannelRow, error) {
 	return f.links, nil
+}
+func (f *fakeStore) CreateChannel(_ context.Context, p goqueries.CreateChannelParams) (goqueries.Channel, error) {
+	f.createParams = p
+	return goqueries.Channel{
+		ID: p.ID, TenantID: p.TenantID, Name: p.Name, ParserConfig: p.ParserConfig,
+		WorkflowUrl: p.WorkflowUrl, ReplyPolicy: p.ReplyPolicy,
+		ConfidenceThresholds: p.ConfidenceThresholds, EchoBackEnabled: p.EchoBackEnabled,
+		RecallWindowSeconds: p.RecallWindowSeconds, CreatedAt: p.CreatedAt,
+	}, nil
+}
+func (f *fakeStore) UpdateChannel(_ context.Context, p goqueries.UpdateChannelParams) (goqueries.Channel, error) {
+	f.updateParams = p
+	if f.updateErr != nil {
+		return goqueries.Channel{}, f.updateErr
+	}
+	return goqueries.Channel{ID: p.ID, TenantID: p.TenantID, Name: p.Name.String, WorkflowUrl: p.WorkflowUrl}, nil
 }
 
 // --- service ---
@@ -148,12 +171,23 @@ type fakeSvc struct {
 	gotIn    LinkInput
 	unlinked [2]uuid.UUID
 	called   string
+
+	createIn CreateInput
+	updateIn UpdateInput
 }
 
 func (f *fakeSvc) List(_ context.Context, _ uuid.UUID) ([]Channel, error) { return f.chans, f.err }
 func (f *fakeSvc) Get(_ context.Context, _, _ uuid.UUID) (Channel, error) { return f.ch, f.err }
 func (f *fakeSvc) ListLinks(_ context.Context, _, _ uuid.UUID) ([]Link, error) {
 	return f.links, f.err
+}
+func (f *fakeSvc) Create(_ context.Context, in CreateInput, _ func() time.Time, _ func() uuid.UUID) (Channel, error) {
+	f.createIn, f.called = in, "create"
+	return f.ch, f.err
+}
+func (f *fakeSvc) Update(_ context.Context, _, _ uuid.UUID, in UpdateInput) (Channel, error) {
+	f.updateIn, f.called = in, "update"
+	return f.ch, f.err
 }
 func (f *fakeSvc) Link(_ context.Context, in LinkInput) (Link, error) {
 	f.gotIn, f.called = in, "link"
@@ -276,5 +310,253 @@ func TestHandlerListLinks(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "telegram") {
 		t.Errorf("account detail missing from links: %s", rec.Body.String())
+	}
+}
+
+// --- create / update ---
+
+func fixedTime() time.Time { return time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC) }
+
+// The headline promise of Create: a name is enough. If this regresses, the
+// "no SQL required" setup path quietly stops working.
+func TestCreateOnlyNeedsAName(t *testing.T) {
+	fs := &fakeStore{}
+	id := uuid.New()
+	ch, err := NewService(fs).Create(context.Background(),
+		CreateInput{TenantID: uuid.New(), Name: "Field Ops"},
+		fixedTime, func() uuid.UUID { return id })
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if ch.ID != id || ch.Name != "Field Ops" {
+		t.Fatalf("unexpected channel: %+v", ch)
+	}
+	// Asserted against literals, not against the Default* vars themselves —
+	// comparing a constant to itself can never fail, and these values are a
+	// contract with internal/ingest (defaultRecallSeconds) and the spec, not
+	// free parameters.
+	if ch.ReplyPolicy != "reply_to_sender" {
+		t.Errorf("reply_policy = %q, want reply_to_sender", ch.ReplyPolicy)
+	}
+	if ch.RecallWindowSeconds != 120 {
+		t.Errorf("recall window = %d, want 120 (matches ingest defaultRecallSeconds)", ch.RecallWindowSeconds)
+	}
+	if !ch.EchoBackEnabled {
+		t.Error("echo_back should default on")
+	}
+	if ch.Mode != "structured" {
+		t.Errorf("mode = %q, want structured", ch.Mode)
+	}
+	// The default command set must match what ingest falls back to, or creating
+	// a channel would silently change how existing traffic parses.
+	var pc struct {
+		Commands []string `json:"commands"`
+	}
+	if err := json.Unmarshal(fs.createParams.ParserConfig, &pc); err != nil {
+		t.Fatalf("default parser_config is not valid JSON: %v", err)
+	}
+	const wantCommands = "STATUS,NEEDS,DAMAGE,MISSING,RESOURCE,HERE,NOTE,SOS"
+	if got := strings.Join(pc.Commands, ","); got != wantCommands {
+		t.Errorf("default commands = %q, want %q (must match cmd/server's parserCfg)", got, wantCommands)
+	}
+}
+
+// The default thresholds are a contract with the policy gate, so tie the two
+// together rather than trusting two hand-copied literals to stay in step.
+func TestDefaultThresholdsMatchPolicyGate(t *testing.T) {
+	var got struct {
+		High   float64 `json:"high"`
+		Medium float64 `json:"medium"`
+	}
+	if err := json.Unmarshal(DefaultConfidenceThresholds, &got); err != nil {
+		t.Fatalf("DefaultConfidenceThresholds is not valid JSON: %v", err)
+	}
+	if got.High != policy.DefaultThresholds.High || got.Medium != policy.DefaultThresholds.Medium {
+		t.Errorf("channel defaults {high:%v medium:%v} do not match policy.DefaultThresholds {high:%v medium:%v}",
+			got.High, got.Medium, policy.DefaultThresholds.High, policy.DefaultThresholds.Medium)
+	}
+}
+
+func TestCreateRejectsBlankName(t *testing.T) {
+	_, err := NewService(&fakeStore{}).Create(context.Background(),
+		CreateInput{TenantID: uuid.New(), Name: "   "}, fixedTime, uuid.New)
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("want ErrInvalid, got %v", err)
+	}
+}
+
+// A typo'd mode is the dangerous case: ingest treats anything that is not
+// "passthrough" as the command grammar, so "passthru" would silently run the
+// wrong pipeline over live traffic rather than erroring.
+func TestCreateRejectsUnknownParserMode(t *testing.T) {
+	_, err := NewService(&fakeStore{}).Create(context.Background(), CreateInput{
+		TenantID: uuid.New(), Name: "Ops", ParserConfig: json.RawMessage(`{"mode":"passthru"}`),
+	}, fixedTime, uuid.New)
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("want ErrInvalid for bad mode, got %v", err)
+	}
+}
+
+func TestCreateRejectsInvertedThresholds(t *testing.T) {
+	_, err := NewService(&fakeStore{}).Create(context.Background(), CreateInput{
+		TenantID: uuid.New(), Name: "Ops",
+		ConfidenceThresholds: json.RawMessage(`{"high":0.4,"medium":0.9}`),
+	}, fixedTime, uuid.New)
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("want ErrInvalid for medium > high, got %v", err)
+	}
+}
+
+func TestCreateRejectsBadReplyPolicy(t *testing.T) {
+	_, err := NewService(&fakeStore{}).Create(context.Background(), CreateInput{
+		TenantID: uuid.New(), Name: "Ops", ReplyPolicy: "shout",
+	}, fixedTime, uuid.New)
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("want ErrInvalid, got %v", err)
+	}
+}
+
+func TestCreateStoresWorkflowURL(t *testing.T) {
+	fs := &fakeStore{}
+	ch, err := NewService(fs).Create(context.Background(), CreateInput{
+		TenantID: uuid.New(), Name: "Ops", WorkflowURL: "https://consumer.example/hook",
+	}, fixedTime, uuid.New)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if ch.WorkflowURL != "https://consumer.example/hook" {
+		t.Errorf("workflow_url = %q", ch.WorkflowURL)
+	}
+	if !fs.createParams.WorkflowUrl.Valid {
+		t.Error("workflow_url should be stored as non-NULL")
+	}
+}
+
+// Omitting workflow_url must store NULL, not "": GetInboundChannelForAccount
+// and the diagnostics both treat empty and NULL as "nowhere to forward", and a
+// stored empty string would make the column's meaning ambiguous.
+func TestCreateWithoutWorkflowURLStoresNull(t *testing.T) {
+	fs := &fakeStore{}
+	if _, err := NewService(fs).Create(context.Background(),
+		CreateInput{TenantID: uuid.New(), Name: "Ops"}, fixedTime, uuid.New); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if fs.createParams.WorkflowUrl.Valid {
+		t.Error("absent workflow_url should be NULL")
+	}
+}
+
+// The reason Update exists: pointing an existing channel at a consumer must not
+// require restating parser_config, thresholds, or anything else.
+func TestUpdateOnlyWorkflowURLLeavesOtherColumnsAlone(t *testing.T) {
+	fs := &fakeStore{}
+	url := "https://new.example/hook"
+	if _, err := NewService(fs).Update(context.Background(), uuid.New(), uuid.New(),
+		UpdateInput{WorkflowURL: &url}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	p := fs.updateParams
+	if !p.WorkflowUrl.Valid || p.WorkflowUrl.String != url {
+		t.Errorf("workflow_url not set: %+v", p.WorkflowUrl)
+	}
+	for name, valid := range map[string]bool{
+		"name": p.Name.Valid, "reply_policy": p.ReplyPolicy.Valid,
+		"echo_back_enabled": p.EchoBackEnabled.Valid, "recall_window_seconds": p.RecallWindowSeconds.Valid,
+	} {
+		if valid {
+			t.Errorf("%s should have been left untouched", name)
+		}
+	}
+	if p.ParserConfig != nil || p.ConfidenceThresholds != nil {
+		t.Error("json columns should have been left untouched")
+	}
+}
+
+func TestUpdateUnknownChannelIsNotFound(t *testing.T) {
+	fs := &fakeStore{updateErr: pgx.ErrNoRows}
+	name := "x"
+	_, err := NewService(fs).Update(context.Background(), uuid.New(), uuid.New(), UpdateInput{Name: &name})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+// --- create / update handlers ---
+
+func TestHandlerCreate201(t *testing.T) {
+	tenant := uuid.New()
+	fs := &fakeSvc{ch: Channel{ID: uuid.New(), Name: "Field Ops"}}
+	rec := do(t, fs, http.MethodPost, "/v1/channels", `{"name":"Field Ops"}`, tenant.String())
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body %s)", rec.Code, rec.Body)
+	}
+	if fs.called != "create" || fs.createIn.Name != "Field Ops" {
+		t.Errorf("service not called correctly: %s %+v", fs.called, fs.createIn)
+	}
+	if fs.createIn.TenantID != tenant {
+		t.Errorf("tenant not scoped: got %s want %s", fs.createIn.TenantID, tenant)
+	}
+}
+
+func TestHandlerCreateRequiresTenant(t *testing.T) {
+	rec := do(t, &fakeSvc{}, http.MethodPost, "/v1/channels", `{"name":"x"}`, "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 without a tenant header", rec.Code)
+	}
+}
+
+// A validation failure must say what was wrong. A bare "invalid" turns channel
+// setup into guesswork, which is the friction this endpoint exists to remove.
+func TestHandlerCreateInvalidReturnsDetail(t *testing.T) {
+	fs := &fakeSvc{err: fmt.Errorf("%w: reply_policy must be reply_to_sender, broadcast or custom", ErrInvalid)}
+	rec := do(t, fs, http.MethodPost, "/v1/channels", `{"name":"x","reply_policy":"shout"}`, uuid.New().String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	var body struct {
+		Error  string `json:"error"`
+		Detail string `json:"detail"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("bad JSON: %v", err)
+	}
+	if !strings.Contains(body.Detail, "reply_policy") {
+		t.Errorf("detail should name the offending field, got %q", body.Detail)
+	}
+}
+
+func TestHandlerUpdate200(t *testing.T) {
+	id := uuid.New()
+	fs := &fakeSvc{ch: Channel{ID: id}}
+	rec := do(t, fs, http.MethodPatch, "/v1/channels/"+id.String(),
+		`{"workflow_url":"https://consumer.example/hook"}`, uuid.New().String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+	if fs.called != "update" {
+		t.Fatalf("service not called: %s", fs.called)
+	}
+	if fs.updateIn.WorkflowURL == nil || *fs.updateIn.WorkflowURL != "https://consumer.example/hook" {
+		t.Errorf("workflow_url not passed through: %+v", fs.updateIn.WorkflowURL)
+	}
+	// Everything the caller omitted must arrive as nil so the SQL leaves those
+	// columns alone.
+	if fs.updateIn.Name != nil || fs.updateIn.ReplyPolicy != nil || fs.updateIn.EchoBackEnabled != nil {
+		t.Error("omitted fields should be nil, not zero values")
+	}
+}
+
+func TestHandlerUpdateRejectsBadID(t *testing.T) {
+	rec := do(t, &fakeSvc{}, http.MethodPatch, "/v1/channels/not-a-uuid", `{}`, uuid.New().String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestHandlerUpdateNotFound404(t *testing.T) {
+	fs := &fakeSvc{err: ErrNotFound}
+	rec := do(t, fs, http.MethodPatch, "/v1/channels/"+uuid.New().String(), `{"name":"x"}`, uuid.New().String())
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }

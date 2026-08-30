@@ -1,11 +1,13 @@
 // Package channels exposes the routing surface: reading channels and writing the
 // channel_accounts links that decide where an account's inbound traffic goes.
 //
-// Channel rows themselves are still created out of band (their parser_config,
-// thresholds and mode are deployment config, not product data). What a product
-// or console genuinely needs is the link — without it an account exists but
-// reaches no consumer, and it does so silently. Layering matches the accounts
-// package: store (sqlc goqueries) -> Service -> Handler.
+// Channels are created here too. They were once written by hand in SQL on the
+// grounds that parser_config and thresholds are deployment config rather than
+// product data — but that made the first-run experience a trap: without a
+// channel there is no workflow_url, so an account accepts messages, stores
+// them, and forwards them nowhere, silently. Sensible defaults plus a create
+// endpoint mean a working deployment needs no SQL at all. Layering matches the
+// accounts package: store (sqlc goqueries) -> Service -> Handler.
 package channels
 
 import (
@@ -21,7 +23,7 @@ import (
 // Sentinel errors mapped to HTTP status by the handler.
 var (
 	ErrNotFound = errors.New("channel not found")
-	ErrInvalid  = errors.New("invalid link")
+	ErrInvalid  = errors.New("invalid")
 )
 
 // Valid link directions. 'inbound' and 'both' are what ingest resolves on;
@@ -36,6 +38,8 @@ type store interface {
 	LinkAccountToChannel(ctx context.Context, arg goqueries.LinkAccountToChannelParams) (goqueries.ChannelAccount, error)
 	UnlinkAccountFromChannel(ctx context.Context, arg goqueries.UnlinkAccountFromChannelParams) (int64, error)
 	ListAccountLinksForChannel(ctx context.Context, channelID uuid.UUID) ([]goqueries.ListAccountLinksForChannelRow, error)
+	CreateChannel(ctx context.Context, arg goqueries.CreateChannelParams) (goqueries.Channel, error)
+	UpdateChannel(ctx context.Context, arg goqueries.UpdateChannelParams) (goqueries.Channel, error)
 }
 
 // Channel is the API-facing view of a channel.
@@ -67,6 +71,49 @@ type Link struct {
 	AccountLabel       string `json:"account_label,omitempty"`
 	AccountStatus      string `json:"account_status,omitempty"`
 }
+
+// CreateInput is the data needed to create a channel. Everything except Name
+// has a working default — the point is that `{"name":"Field Ops"}` is enough.
+type CreateInput struct {
+	TenantID             uuid.UUID
+	Name                 string
+	ParserConfig         json.RawMessage
+	WorkflowURL          string
+	ReplyPolicy          string
+	ConfidenceThresholds json.RawMessage
+	EchoBackEnabled      *bool
+	RecallWindowSeconds  *int32
+}
+
+// UpdateInput is a partial update; nil fields are left unchanged. Setting
+// WorkflowURL to a pointer-to-empty-string is how a caller clears it.
+type UpdateInput struct {
+	Name                 *string
+	ParserConfig         json.RawMessage
+	WorkflowURL          *string
+	ReplyPolicy          *string
+	ConfidenceThresholds json.RawMessage
+	EchoBackEnabled      *bool
+	RecallWindowSeconds  *int32
+}
+
+// Defaults applied on create. These mirror the service-level fallbacks in
+// internal/ingest so that a channel created with only a name behaves exactly
+// like the unlinked-account path an operator has already seen working, rather
+// than changing behaviour the moment they create their first channel.
+var (
+	DefaultCommands             = []string{"STATUS", "NEEDS", "DAMAGE", "MISSING", "RESOURCE", "HERE", "NOTE", "SOS"}
+	DefaultReplyPolicy          = "reply_to_sender"
+	DefaultConfidenceThresholds = json.RawMessage(`{"high":0.9,"medium":0.5}`)
+	DefaultRecallWindowSeconds  = int32(120)
+)
+
+// validReplyPolicies guards the column, which is a bare TEXT in the schema.
+var validReplyPolicies = map[string]bool{"reply_to_sender": true, "broadcast": true, "custom": true}
+
+// validModes are the parser modes ingest understands. "structured" runs the
+// command grammar; "passthrough" skips it and routes raw text to the consumer.
+var validModes = map[string]bool{"structured": true, "passthrough": true}
 
 // LinkInput is the data needed to link an account to a channel.
 type LinkInput struct {

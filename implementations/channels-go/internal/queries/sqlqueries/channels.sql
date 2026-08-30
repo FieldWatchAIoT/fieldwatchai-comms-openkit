@@ -60,3 +60,32 @@ JOIN channel_accounts ca ON ca.channel_id = c.id
 WHERE ca.account_id = $1 AND ca.direction IN ('inbound', 'both')
 ORDER BY ca.priority DESC
 LIMIT 1;
+
+-- name: CreateChannel :one
+-- Create a routing channel. Until this existed the row could only be written by
+-- hand in SQL, which meant a new deployment silently forwarded nothing: with no
+-- channel there is no workflow_url, and ingest falls back to defaults.
+INSERT INTO channels (
+  id, tenant_id, name, parser_config, workflow_url, reply_policy,
+  confidence_thresholds, echo_back_enabled, recall_window_seconds, created_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, tenant_id, name, parser_config, workflow_url, reply_policy,
+          confidence_thresholds, echo_back_enabled, recall_window_seconds,
+          audit_retention_years, created_at;
+
+-- name: UpdateChannel :one
+-- Partial update: a NULL argument leaves the column untouched, so a caller can
+-- set workflow_url without restating the parser config.
+UPDATE channels
+SET name                  = COALESCE(sqlc.narg('name'), name),
+    parser_config         = COALESCE(sqlc.narg('parser_config'), parser_config),
+    workflow_url          = COALESCE(sqlc.narg('workflow_url'), workflow_url),
+    reply_policy          = COALESCE(sqlc.narg('reply_policy'), reply_policy),
+    confidence_thresholds = COALESCE(sqlc.narg('confidence_thresholds'), confidence_thresholds),
+    echo_back_enabled     = COALESCE(sqlc.narg('echo_back_enabled'), echo_back_enabled),
+    recall_window_seconds = COALESCE(sqlc.narg('recall_window_seconds'), recall_window_seconds)
+WHERE id = sqlc.arg('id') AND tenant_id = sqlc.arg('tenant_id')
+RETURNING id, tenant_id, name, parser_config, workflow_url, reply_policy,
+          confidence_thresholds, echo_back_enabled, recall_window_seconds,
+          audit_retention_years, created_at;
