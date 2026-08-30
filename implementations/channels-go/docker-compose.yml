@@ -15,10 +15,13 @@ services:
     ports:
       - "5434:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U openkit -d openkit"]
+      # -h 127.0.0.1 forces a TCP probe; over the unix socket the entrypoint's
+      # temporary init server answers first and the container reports healthy
+      # before Postgres listens on TCP. See the root docker-compose.yml.
+      test: ["CMD-SHELL", "pg_isready -U openkit -d openkit -h 127.0.0.1"]
       interval: 2s
       timeout: 3s
-      retries: 20
+      retries: 30
     volumes:
       - channels_pgdata:/var/lib/postgresql/data
 
@@ -26,6 +29,7 @@ services:
     build:
       context: .
       dockerfile: deploy/Dockerfile
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
