@@ -94,7 +94,7 @@ variable "platform_secret_arn_map" {
 
 variable "extra_env" {
   description = <<-EOT
-    Plain-text (non-secret) env vars to inject, e.g. PUBLIC_BASE_URL, EMAIL_SES_TOPIC_ARN, ACCOUNTS_MAP.
+    Plain-text (non-secret) env vars to inject, e.g. PUBLIC_BASE_URL, EMAIL_SES_TOPIC_ARN.
     Do NOT put secrets here — use platform_secret_arn_map.
   EOT
   type        = map(string)

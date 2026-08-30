@@ -33,5 +33,6 @@ services:
       CHANNELS_URL: "http://fakechannels:9090"
       INTERNAL_API_TOKEN: "local-token"
       WHATSAPP_ULTRAMSG_WEBHOOK_SECRET: "local-secret"
-      ACCOUNTS_MAP: '{"whatsapp-ultramsg":{"instance123":"acc_local"}}'
+      # No account config here: fakechannels stubs /v1/accounts/lookup and
+      # resolves every identifier, which is the point of the stub.
       # SQS_QUEUE_URL intentionally unset -> in-memory queue for local dev

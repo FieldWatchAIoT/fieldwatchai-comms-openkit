@@ -43,11 +43,9 @@ platform_secret_arn_map = {
 #                          TWILIO_AUTH_TOKEN is set. Use your webhook's real URL.
 #   EMAIL_SES_TOPIC_ARN — SNS topic allowlist; required if
 #                          EMAIL_SES_WEBHOOK_SECRET is set.
-#   ACCOUNTS_MAP        — JSON platform -> {identifier -> account_id} mapping.
 extra_env = {
   PUBLIC_BASE_URL = "https://webhook.example.com"
   # EMAIL_SES_TOPIC_ARN = "arn:aws:sns:us-west-2:123456789012:comms-webhook-email"
-  # ACCOUNTS_MAP        = "{\"whatsapp-ultramsg\":{\"instance123\":\"acc_abc\"}}"
 }
 
 # ---- sizing -----------------------------------------------------

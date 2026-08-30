@@ -124,10 +124,8 @@ services:
       INTERNAL_API_TOKEN: "local-token"
       # UltraMSG listener: shared secret in ?token=<...>
       WHATSAPP_ULTRAMSG_WEBHOOK_SECRET: "local-secret"
-      # Map: platform -> { platform_identifier -> account_id }.
-      # The account_id below must exist in channels' accounts table — seed it
-      # first via POST /v1/accounts.
-      ACCOUNTS_MAP: '{"whatsapp-ultramsg":{"instance123":"00000000-0000-0000-0000-0000000000aa"}}'
+      # Accounts are resolved at runtime against channels' /v1/accounts/lookup;
+      # the `seed` service above inserts the account this demo needs.
       # LocalStack SQS. The init script under deploy/localstack-init creates
       # the queue at startup. AWS SDK v2 honors AWS_ENDPOINT_URL for all
       # service clients (including SQS).
