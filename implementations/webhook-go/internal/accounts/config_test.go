@@ -44,7 +44,7 @@ func TestConfigResolver_UnknownPlatformIsNotFound(t *testing.T) {
 	}
 }
 
-// TestNewConfigResolver_MalformedJSONErrors confirms a bad ACCOUNTS_MAP fails
+// TestNewConfigResolver_MalformedJSONErrors confirms a malformed map fails
 // fast at startup rather than silently resolving nothing at runtime.
 func TestNewConfigResolver_MalformedJSONErrors(t *testing.T) {
 	if _, err := NewConfigResolver(`{not json`); err == nil {

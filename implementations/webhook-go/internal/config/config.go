@@ -44,7 +44,6 @@ type Config struct {
 	// Twilio signed against, behind the ALB. Required when TwilioAuthToken is set.
 	PublicBaseURL string
 
-	AccountsMap      string
 	DrainConcurrency int
 }
 
@@ -67,7 +66,6 @@ func Load() Config {
 		EmailSESWebhookSecret: os.Getenv("EMAIL_SES_WEBHOOK_SECRET"),
 		EmailSESTopicARN:      os.Getenv("EMAIL_SES_TOPIC_ARN"),
 		PublicBaseURL:         os.Getenv("PUBLIC_BASE_URL"),
-		AccountsMap:           os.Getenv("ACCOUNTS_MAP"),
 		DrainConcurrency:      getenvInt("DRAIN_CONCURRENCY", 8),
 	}
 }
@@ -121,7 +119,6 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("twilio_auth_token_set", c.TwilioAuthToken != ""),
 		slog.Bool("telegram_webhook_secret_set", c.TelegramWebhookSecret != ""),
 		slog.Bool("email_ses_webhook_secret_set", c.EmailSESWebhookSecret != ""),
-		slog.Bool("accounts_map_set", c.AccountsMap != ""),
 	)
 }
 

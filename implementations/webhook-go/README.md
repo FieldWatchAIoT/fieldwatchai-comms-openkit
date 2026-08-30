@@ -81,7 +81,6 @@ Or with the compose stub running:
 CHANNELS_URL=http://localhost:9090 \
 INTERNAL_API_TOKEN=local-token \
 WHATSAPP_ULTRAMSG_WEBHOOK_SECRET=local-secret \
-ACCOUNTS_MAP='{"whatsapp-ultramsg":{"instance123":"acc_local"}}' \
 go run ./cmd/server
 ```
 
