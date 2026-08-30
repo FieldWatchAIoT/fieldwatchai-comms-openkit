@@ -16,6 +16,14 @@ func main() {
 	if port == "" {
 		port = "9090"
 	}
+	// Readiness for compose's healthcheck. Deliberately silent: `go run`
+	// compiles before it listens, so compose polls this every few seconds, and
+	// logging it would bury the canonical message this stub exists to show.
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+
 	// Stub the account lookup so local end-to-end works without real channels.
 	http.HandleFunc("/v1/accounts/lookup", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("lookup type=%q identifier=%q", r.URL.Query().Get("type"), r.URL.Query().Get("identifier"))
