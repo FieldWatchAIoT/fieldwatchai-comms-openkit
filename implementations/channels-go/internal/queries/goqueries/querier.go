@@ -100,6 +100,12 @@ type Querier interface {
 	// Lightweight projection for the resolver candidate set + short_id_check.
 	ListContactShortIDs(ctx context.Context, tenantID uuid.UUID) ([]ListContactShortIDsRow, error)
 	ListContactsForTenant(ctx context.Context, tenantID uuid.UUID) ([]Contact, error)
+	// Recent traffic for the console. Deliberately excludes raw_payload (the
+	// verbatim provider envelope, the largest and most sensitive column) and
+	// credentials never appear here at all — this feeds a read-only view whose
+	// whole job is letting an operator confirm that messages are arriving and being
+	// understood.
+	ListRecentMessagesForTenant(ctx context.Context, arg ListRecentMessagesForTenantParams) ([]ListRecentMessagesForTenantRow, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
 	// Inbound messages that should have reached a consumer and didn't:
 	// workflow_fired is still false, the channel has a workflow_url, and the policy

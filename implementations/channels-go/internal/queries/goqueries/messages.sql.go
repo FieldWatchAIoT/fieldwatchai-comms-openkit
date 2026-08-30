@@ -196,6 +196,69 @@ func (q *Queries) GetMessageIDByPlatformID(ctx context.Context, arg GetMessageID
 	return id, err
 }
 
+const listRecentMessagesForTenant = `-- name: ListRecentMessagesForTenant :many
+SELECT m.id, m.direction, m.sender_endpoint, m.body_text, m.policy_action,
+       m.parsed, m.workflow_fired, m.received_at,
+       c.name AS channel_name
+FROM messages m
+LEFT JOIN channels c ON c.id = m.channel_id
+WHERE m.tenant_id = $1
+ORDER BY m.received_at DESC
+LIMIT $2
+`
+
+type ListRecentMessagesForTenantParams struct {
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Limit    int32     `db:"limit" json:"limit"`
+}
+
+type ListRecentMessagesForTenantRow struct {
+	ID             uuid.UUID   `db:"id" json:"id"`
+	Direction      string      `db:"direction" json:"direction"`
+	SenderEndpoint pgtype.Text `db:"sender_endpoint" json:"sender_endpoint"`
+	BodyText       string      `db:"body_text" json:"body_text"`
+	PolicyAction   pgtype.Text `db:"policy_action" json:"policy_action"`
+	Parsed         []byte      `db:"parsed" json:"parsed"`
+	WorkflowFired  bool        `db:"workflow_fired" json:"workflow_fired"`
+	ReceivedAt     time.Time   `db:"received_at" json:"received_at"`
+	ChannelName    pgtype.Text `db:"channel_name" json:"channel_name"`
+}
+
+// Recent traffic for the console. Deliberately excludes raw_payload (the
+// verbatim provider envelope, the largest and most sensitive column) and
+// credentials never appear here at all — this feeds a read-only view whose
+// whole job is letting an operator confirm that messages are arriving and being
+// understood.
+func (q *Queries) ListRecentMessagesForTenant(ctx context.Context, arg ListRecentMessagesForTenantParams) ([]ListRecentMessagesForTenantRow, error) {
+	rows, err := q.db.Query(ctx, listRecentMessagesForTenant, arg.TenantID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRecentMessagesForTenantRow{}
+	for rows.Next() {
+		var i ListRecentMessagesForTenantRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Direction,
+			&i.SenderEndpoint,
+			&i.BodyText,
+			&i.PolicyAction,
+			&i.Parsed,
+			&i.WorkflowFired,
+			&i.ReceivedAt,
+			&i.ChannelName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUnfiredForwards = `-- name: ListUnfiredForwards :many
 SELECT m.id, m.tenant_id, m.account_id, m.channel_id, m.sender_endpoint,
        m.body_text, m.body_attachments, m.parsed, m.received_at,

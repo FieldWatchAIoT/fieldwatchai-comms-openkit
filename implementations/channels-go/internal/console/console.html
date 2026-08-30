@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comms Console</title>
+<style>
+/* Self-contained by necessity, not preference. This console is for people
+   coordinating a response, often on a degraded or metered connection, and a
+   page that fetches a webfont from a CDN is broken exactly when it matters.
+   No external requests: system faces, no icon font, no framework. The
+   personality is carried by spacing, weight and colour instead. */
+:root {
+  color-scheme: light dark;
+
+  /* Neutrals carry a slight cool bias toward the accent — a maritime slate
+     rather than an inherited pure grey. */
+  --ground:      #f4f6f8;
+  --surface:     #ffffff;
+  --surface-2:   #eef1f4;
+  --line:        #dbe2e8;
+  --line-strong: #c3ced7;
+  --ink:         #111b21;
+  --ink-muted:   #5b6c78;
+  --ink-faint:   #8496a2;
+
+  --accent:      #0b6e75;
+  --accent-ink:  #ffffff;
+
+  /* Semantic state, deliberately separate from the accent hue. These map to
+     policy_action, which is the single most scanned value on the page. */
+  --ok:       #1c7a4e;
+  --ok-bg:    #e4f2ea;
+  --warn:     #8a5a00;
+  --warn-bg:  #f8eeda;
+  --crit:     #a32e28;
+  --crit-bg:  #f7e6e4;
+  --idle:     #5b6c78;
+  --idle-bg:  #e8ecef;
+
+  --radius: 6px;
+  --gap: 20px;
+
+  --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+             Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+               "Liberation Mono", monospace;
+}
+
+/* Only tokens are redefined per theme; every component below reads tokens, so
+   nothing depends on which theme resolved. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:      #0e1418;
+    --surface:     #151d23;
+    --surface-2:   #1c262d;
+    --line:        #26333b;
+    --line-strong: #35454f;
+    --ink:         #e4ecf1;
+    --ink-muted:   #93a5b1;
+    --ink-faint:   #6b7d89;
+
+    --accent:      #46b3ba;
+    --accent-ink:  #04191b;
+
+    --ok:      #59c78d;
+    --ok-bg:   #14301f;
+    --warn:    #d9a441;
+    --warn-bg: #33260c;
+    --crit:    #e8746b;
+    --crit-bg: #38191a;
+    --idle:    #93a5b1;
+    --idle-bg: #1f2a31;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:      #0e1418;
+  --surface:     #151d23;
+  --surface-2:   #1c262d;
+  --line:        #26333b;
+  --line-strong: #35454f;
+  --ink:         #e4ecf1;
+  --ink-muted:   #93a5b1;
+  --ink-faint:   #6b7d89;
+
+  --accent:      #46b3ba;
+  --accent-ink:  #04191b;
+
+  --ok:      #59c78d;
+  --ok-bg:   #14301f;
+  --warn:    #d9a441;
+  --warn-bg: #33260c;
+  --crit:    #e8746b;
+  --crit-bg: #38191a;
+  --idle:    #93a5b1;
+  --idle-bg: #1f2a31;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2 { margin: 0; text-wrap: balance; }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 20px 64px; }
+
+/* --- header ------------------------------------------------------------ */
+header {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  position: sticky; top: 0; z-index: 10;
+}
+.bar {
+  max-width: 1180px; margin: 0 auto; padding: 14px 20px;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+.brand h1 { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+.brand .sub {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--ink-faint); font-weight: 600;
+}
+.controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+select, button, input {
+  font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  padding: 6px 10px;
+}
+button { cursor: pointer; }
+button:hover { background: var(--surface-2); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.primary:hover { filter: brightness(1.08); }
+:is(button, select, input, a):focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+label.toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--ink-muted); font-size: 13px; user-select: none;
+}
+
+/* --- status band ------------------------------------------------------- */
+/* The first thing on the page answers the question people arrive with:
+   is anything actually working? */
+.status {
+  margin-top: var(--gap); border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--surface); overflow: hidden;
+}
+.status-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 18px; border-left: 4px solid var(--idle);
+}
+.status.ok  .status-head { border-left-color: var(--ok); }
+.status.bad .status-head { border-left-color: var(--crit); }
+.status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--idle); flex: none; }
+.status.ok  .status-dot { background: var(--ok); }
+.status.bad .status-dot { background: var(--crit); }
+.status-text { font-weight: 620; }
+.status.ok  .status-text { color: var(--ok); }
+.status.bad .status-text { color: var(--crit); }
+.status-note { color: var(--ink-muted); font-size: 13px; }
+
+.findings { border-top: 1px solid var(--line); display: flex; flex-direction: column; }
+.finding {
+  padding: 13px 18px 13px 34px; border-top: 1px solid var(--line);
+  position: relative; display: flex; flex-direction: column; gap: 5px;
+}
+.finding:first-child { border-top: 0; }
+.finding::before {
+  content: ""; position: absolute; left: 18px; top: 18px;
+  width: 7px; height: 7px; border-radius: 2px; background: var(--warn);
+}
+.finding.blocking::before { background: var(--crit); }
+.finding .sev {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--warn);
+}
+.finding.blocking .sev { color: var(--crit); }
+.finding .summary { color: var(--ink); }
+.finding .remedy {
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.55;
+  color: var(--ink-muted); background: var(--surface-2);
+  padding: 8px 10px; border-radius: 4px; overflow-x: auto;
+}
+
+/* --- counts ------------------------------------------------------------ */
+.counts {
+  margin-top: var(--gap);
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;
+}
+.count {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px 16px;
+}
+.count .n {
+  font-family: var(--font-mono); font-size: 26px; font-weight: 600;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+}
+.count .k {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--ink-faint); font-weight: 600; margin-top: 2px;
+}
+.count.zero .n { color: var(--ink-faint); }
+
+/* --- message stream ---------------------------------------------------- */
+.section-head {
+  margin: 30px 0 12px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+}
+.section-head h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--ink-muted); }
+.section-head .hint { font-size: 12px; color: var(--ink-faint); margin-left: auto; }
+
+.table-wrap {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow-x: auto;
+}
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.09em; color: var(--ink-faint); font-weight: 700;
+  padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+td { padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: var(--surface-2); }
+
+/* A severity stripe on the row itself: state is readable before any text. */
+td.act { border-left: 3px solid transparent; }
+/* One stripe per value the pipeline actually writes: execute, echo_back,
+   clarify, recalled, routed, sent. Anything unmapped stays transparent rather
+   than silently picking a misleading colour. */
+tr.a-execute td.act,
+tr.a-routed  td.act,
+tr.a-sent    td.act { border-left-color: var(--ok); }
+tr.a-echo_back td.act,
+tr.a-clarify   td.act { border-left-color: var(--warn); }
+tr.a-recalled  td.act { border-left-color: var(--line-strong); }
+
+.mono { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.when { color: var(--ink-muted); white-space: nowrap; }
+.from { white-space: nowrap; }
+.body { min-width: 200px; }
+.dir {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.pill {
+  display: inline-block; padding: 2px 8px; border-radius: 100px;
+  font-size: 11px; font-weight: 650; letter-spacing: 0.02em; white-space: nowrap;
+  background: var(--idle-bg); color: var(--idle);
+}
+.pill.ok   { background: var(--ok-bg);   color: var(--ok); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.crit { background: var(--crit-bg); color: var(--crit); }
+
+.understood { display: flex; flex-direction: column; gap: 2px; }
+.understood .cmd { font-family: var(--font-mono); font-size: 12px; font-weight: 600; }
+.understood .meta { font-size: 11px; color: var(--ink-faint); }
+.conf { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.empty, .signin {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 34px; text-align: center; color: var(--ink-muted);
+}
+.empty code, .signin code {
+  font-family: var(--font-mono); font-size: 12px;
+  background: var(--surface-2); padding: 2px 6px; border-radius: 4px;
+}
+.signin { max-width: 460px; margin: 60px auto; text-align: left; }
+.signin h2 { font-size: 16px; margin-bottom: 6px; }
+.signin p { color: var(--ink-muted); margin: 0 0 16px; }
+.signin form { display: flex; flex-direction: column; gap: 10px; }
+.signin input { width: 100%; }
+.err {
+  color: var(--crit); background: var(--crit-bg); border: 1px solid var(--crit);
+  border-radius: var(--radius); padding: 10px 12px; font-size: 13px;
+}
+.hidden { display: none !important; }
+footer { margin-top: 30px; font-size: 12px; color: var(--ink-faint); }
+footer a { color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+
+<div id="signin" class="signin">
+  <h2>Comms Console</h2>
+  <p>Read-only view of recent traffic and configuration health.</p>
+  <form id="signin-form">
+    <label for="token" class="dir">Internal API token</label>
+    <input id="token" type="password" autocomplete="current-password"
+           placeholder="INTERNAL_API_TOKEN" required>
+    <div id="signin-err" class="err hidden"></div>
+    <button type="submit" class="primary">Connect</button>
+  </form>
+  <p style="margin-top:14px;font-size:12px">
+    The same token the webhook uses. Held in this tab only, and never stored on disk.
+  </p>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <div class="bar">
+      <div class="brand">
+        <h1>Comms Console</h1>
+        <span class="sub">read only</span>
+      </div>
+      <div class="controls">
+        <select id="tenant" aria-label="Tenant"></select>
+        <label class="toggle"><input type="checkbox" id="auto"> auto-refresh</label>
+        <button id="theme" title="Toggle theme" aria-label="Toggle theme">◐</button>
+        <button id="refresh" class="primary">Refresh</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div id="status" class="status">
+      <div class="status-head">
+        <span class="status-dot"></span>
+        <span class="status-text" id="status-text">Checking…</span>
+        <span class="status-note" id="status-note"></span>
+      </div>
+      <div class="findings hidden" id="findings"></div>
+    </div>
+
+    <div class="counts" id="counts"></div>
+
+    <div class="section-head">
+      <h2>Recent messages</h2>
+      <span class="hint" id="stream-hint"></span>
+    </div>
+    <div id="stream"></div>
+
+    <footer>
+      Serving <span class="mono" id="origin"></span> ·
+      Data from <span class="mono">/v1/diagnostics</span> and <span class="mono">/v1/messages</span>
+    </footer>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var KEY = "openkit.token", TKEY = "openkit.tenant", THEME = "openkit.theme";
+  var token = "", tenants = [], timer = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  // sessionStorage can throw outright (private mode, blocked site data), so
+  // every access is guarded and the page works with no stored value at all.
+  function remember(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} }
+  function recall(k) { try { return sessionStorage.getItem(k) || ""; } catch (e) { return ""; } }
+  function forget(k) { try { sessionStorage.removeItem(k); } catch (e) {} }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function api(path, tenant) {
+    var h = { "Authorization": "Bearer " + token };
+    if (tenant) { h["X-Tenant-ID"] = tenant; }
+    return fetch(path, { headers: h }).then(function (r) {
+      if (r.status === 401) { throw new Error("unauthorized"); }
+      if (!r.ok) { throw new Error(path + " returned " + r.status); }
+      return r.json();
+    });
+  }
+
+  /* --- theme ---------------------------------------------------------- */
+  var stored = recall(THEME);
+  if (stored) { document.documentElement.setAttribute("data-theme", stored); }
+  $("theme").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    var isDark = cur ? cur === "dark"
+      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var next = isDark ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    remember(THEME, next);
+  });
+
+  /* --- sign in -------------------------------------------------------- */
+  function signInError(msg) {
+    var el = $("signin-err");
+    el.textContent = msg;
+    el.classList.remove("hidden");
+  }
+
+  $("signin-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    token = $("token").value.trim();
+    if (!token) { return; }
+    start(true);
+  });
+
+  function start(fromForm) {
+    api("/v1/tenants").then(function (list) {
+      if (!list.length) {
+        throw new Error("No tenants exist yet. Run `make setup`, or POST /v1/tenants.");
+      }
+      tenants = list;
+      remember(KEY, token);
+      $("signin").classList.add("hidden");
+      $("app").classList.remove("hidden");
+      $("origin").textContent = window.location.origin;
+
+      var sel = $("tenant"), want = recall(TKEY);
+      sel.innerHTML = tenants.map(function (t) {
+        return '<option value="' + esc(t.id) + '">' + esc(t.name) + "</option>";
+      }).join("");
+      if (want && tenants.some(function (t) { return t.id === want; })) { sel.value = want; }
+      load();
+    }).catch(function (err) {
+      forget(KEY);
+      if (fromForm || token) {
+        signInError(err.message === "unauthorized"
+          ? "That token was rejected. It must match the service's INTERNAL_API_TOKEN."
+          : err.message);
+      }
+      $("signin").classList.remove("hidden");
+      $("app").classList.add("hidden");
+    });
+  }
+
+  /* --- render --------------------------------------------------------- */
+  function renderStatus(d) {
+    var box = $("status"), findings = d.findings || [];
+    box.classList.toggle("ok", d.healthy);
+    box.classList.toggle("bad", !d.healthy);
+
+    var blocking = findings.filter(function (f) { return f.severity === "blocking"; }).length;
+    $("status-text").textContent = d.healthy ? "Receiving" : "Not receiving";
+    $("status-note").textContent = d.healthy
+      ? (findings.length ? findings.length + " note" + (findings.length > 1 ? "s" : "") + " below" : "Everything needed is configured.")
+      : blocking + " problem" + (blocking === 1 ? "" : "s") + " stopping messages from reaching you.";
+
+    var el = $("findings");
+    el.classList.toggle("hidden", findings.length === 0);
+    el.innerHTML = findings.map(function (f) {
+      return '<div class="finding ' + (f.severity === "blocking" ? "blocking" : "") + '">' +
+        '<span class="sev">' + esc(f.severity) + "</span>" +
+        '<span class="summary">' + esc(f.summary) + "</span>" +
+        '<span class="remedy">' + esc(f.remedy) + "</span></div>";
+    }).join("");
+
+    var c = d.counts || {};
+    $("counts").innerHTML = [
+      ["Accounts", c.accounts], ["Channels", c.channels],
+      ["Contacts", c.contacts], ["Messages", c.messages]
+    ].map(function (p) {
+      return '<div class="count ' + (p[1] ? "" : "zero") + '"><div class="n">' +
+        (p[1] || 0) + '</div><div class="k">' + p[0] + "</div></div>";
+    }).join("");
+  }
+
+  // The six values ingest and the outbound API write, mapped to the three
+  // states an operator cares about: it ran, it is waiting on a person, or it
+  // was withdrawn. Labels are what a coordinator would say; the raw value is
+  // kept in the tooltip because it is what appears in the database and spec.
+  var ACTION = {
+    execute:   { tone: "ok",   label: "acted on" },
+    routed:    { tone: "ok",   label: "routed" },
+    sent:      { tone: "ok",   label: "sent" },
+    echo_back: { tone: "warn", label: "confirming" },
+    clarify:   { tone: "warn", label: "needs reply" },
+    recalled:  { tone: "",     label: "withdrawn" }
+  };
+
+  function renderMessages(rows) {
+    $("stream-hint").textContent = rows.length
+      ? "newest first · " + rows.length + " shown"
+      : "";
+    if (!rows.length) {
+      $("stream").innerHTML = '<div class="empty">No messages yet.<br><br>' +
+        "Send one through the stack, then refresh:<br>" +
+        "<code>curl -X POST '&lt;webhook&gt;/inbound/whatsapp-ultramsg?token=…'</code></div>";
+      return;
+    }
+    var body = rows.map(function (m) {
+      var act = m.policy_action || "—";
+      var p = m.parsed || {};
+      var understood = "";
+      if (p.passthrough) {
+        understood = '<span class="meta">passthrough — no grammar applied</span>';
+      } else if (p.command || p.short_id) {
+        understood = '<span class="cmd">' + esc(p.short_id || "") +
+          (p.command ? " " + esc(p.command) : "") + "</span>" +
+          '<span class="meta">' +
+            (p.short_id_match ? esc(p.short_id_match) + " match · " : "") +
+            'confidence <span class="conf">' + (p.confidence != null ? p.confidence : "—") +
+          "</span></span>";
+      } else {
+        understood = '<span class="meta">not parsed</span>';
+      }
+
+      return '<tr class="a-' + esc(act) + '">' +
+        '<td class="act mono when">' + esc(new Date(m.received_at).toLocaleString()) + "</td>" +
+        '<td><span class="dir">' + esc(m.direction) + "</span></td>" +
+        '<td class="mono from">' + esc(m.sender_endpoint || "—") + "</td>" +
+        '<td class="body">' + esc(m.body_text || "") + "</td>" +
+        '<td><div class="understood">' + understood + "</div></td>" +
+        '<td><span class="pill ' + ((ACTION[act] || {}).tone || "") + '" title="' + esc(act) + '">' +
+          esc((ACTION[act] || {}).label || act) + "</span></td>" +
+        "<td>" + (m.workflow_fired
+          ? '<span class="pill ok">delivered</span>'
+          : '<span class="pill" title="workflow_fired = false">waiting</span>') + "</td>" +
+        "</tr>";
+    }).join("");
+
+    $("stream").innerHTML = '<div class="table-wrap"><table>' +
+      "<thead><tr><th>Received</th><th>Dir</th><th>From</th><th>Message</th>" +
+      "<th>Understood as</th><th>Outcome</th><th>Your system</th></tr></thead>" +
+      "<tbody>" + body + "</tbody></table></div>";
+  }
+
+  /* --- load ----------------------------------------------------------- */
+  function load() {
+    var tenant = $("tenant").value;
+    remember(TKEY, tenant);
+    Promise.all([
+      api("/v1/diagnostics", tenant),
+      api("/v1/messages?limit=50", tenant)
+    ]).then(function (r) {
+      renderStatus(r[0]);
+      renderMessages(r[1].messages || []);
+    }).catch(function (err) {
+      if (err.message === "unauthorized") { forget(KEY); token = ""; start(false); return; }
+      $("stream").innerHTML = '<div class="err">' + esc(err.message) + "</div>";
+    });
+  }
+
+  $("refresh").addEventListener("click", load);
+  $("tenant").addEventListener("change", load);
+  $("auto").addEventListener("change", function (e) {
+    if (timer) { clearInterval(timer); timer = null; }
+    if (e.target.checked) { timer = setInterval(load, 5000); }
+  });
+
+  token = recall(KEY);
+  if (token) { start(false); }
+})();
+</script>
+</body>
+</html>

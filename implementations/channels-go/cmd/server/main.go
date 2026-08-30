@@ -16,6 +16,7 @@ import (
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/accounts"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/channels"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/config"
+	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/console"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/contacts"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/crypto"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/db"
@@ -26,6 +27,7 @@ import (
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/integrations/telegram"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/integrations/twilio"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/integrations/ultramsg"
+	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/messagelog"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/outbound"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/outboundapi"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/parser"
@@ -124,6 +126,7 @@ func main() {
 	// a correctly-accepted message reached no consumer.
 	tenantHandler := tenants.NewHandler(tenants.NewService(queries), logger)
 	diagHandler := diagnostics.NewHandler(diagnostics.NewService(queries), logger)
+	messageHandler := messagelog.NewHandler(messagelog.NewService(queries), logger)
 	acctHandler.RegisterRoutes(v1)
 	ingestHandler.RegisterRoutes(v1)
 	contactHandler.RegisterRoutes(v1)
@@ -132,6 +135,7 @@ func main() {
 	replayHandler.RegisterRoutes(v1)
 	tenantHandler.RegisterRoutes(v1)
 	diagHandler.RegisterRoutes(v1)
+	messageHandler.RegisterRoutes(v1)
 	authed := httpapi.WithBearerAuth(cfg.InternalAPIToken, logger, v1)
 	srv.Mux().Handle("/v1/accounts", authed)
 	srv.Mux().Handle("/v1/accounts/", authed)
@@ -145,6 +149,12 @@ func main() {
 	srv.Mux().Handle("/v1/tenants", authed)
 	srv.Mux().Handle("/v1/tenants/", authed)
 	srv.Mux().Handle("/v1/diagnostics", authed)
+	srv.Mux().Handle("/v1/messages", authed)
+
+	// The console is markup only and carries no data; it authenticates in the
+	// browser against the routes above. Mounted outside `authed` because a
+	// browser cannot attach a bearer token to a top-level navigation.
+	console.RegisterRoutes(srv.Mux())
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
