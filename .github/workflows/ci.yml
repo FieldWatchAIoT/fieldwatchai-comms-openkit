@@ -28,9 +28,9 @@ jobs:
       run:
         working-directory: implementations/${{ matrix.module }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: implementations/${{ matrix.module }}/go.mod
           cache-dependency-path: implementations/${{ matrix.module }}/go.sum
@@ -76,9 +76,9 @@ jobs:
       run:
         working-directory: implementations/channels-go
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: implementations/channels-go/go.mod
           cache-dependency-path: implementations/channels-go/go.sum
@@ -103,7 +103,7 @@ jobs:
     name: end-to-end demo stack
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: docker compose up
         run: docker compose up -d --build
