@@ -21,10 +21,10 @@
 #     psql -U openkit -d openkit \
 #     -c 'SELECT direction, body_text, received_at FROM messages ORDER BY received_at DESC LIMIT 5;'
 #
-# NOTE: channels drops the message with 404 if the platform_identifier is not in
-# the accounts table (unknown account). Seed a row first via POST /v1/accounts
-# or export a demo account before curling — see README.md at the repo root for
-# the exact walkthrough.
+# The `seed` service below inserts the tenant + account + contact the demo needs
+# and then exits. Without those rows the webhook cannot resolve the inbound
+# message to an account and drops it, so the curl above would return 200 and
+# persist nothing.
 
 services:
   postgres:
@@ -86,6 +86,22 @@ services:
       # base64 of 32 zero bytes — dev-only key, do NOT reuse in any real deploy.
       LOCAL_AES_KEY: "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
       AWS_REGION: "us-west-2"
+
+  # One-shot: seeds the tenant + account + contact the demo needs, then exits 0.
+  # Without it the webhook cannot resolve the inbound message to an account and
+  # silently drops it. Idempotent, so it is safe on every `up`.
+  seed:
+    image: postgis/postgis:16-3.4
+    depends_on:
+      postgres:
+        condition: service_healthy
+      channels:
+        condition: service_started
+    environment:
+      PGPASSWORD: openkit
+    volumes:
+      - ./deploy/seed:/seed:ro
+    entrypoint: ["bash", "/seed/seed-demo.sh"]
 
   webhook:
     build:
