@@ -11,8 +11,37 @@ help: ## Show this help
 test: ## Run unit tests
 	$(GO) test ./... -count=1
 
-test-integration: ## Run integration tests (needs Postgres; see docker-compose)
-	$(GO) test ./... -count=1 -tags=integration -p 1
+# The integration tests read FCC_TEST_DATABASE_URL — NOT DATABASE_URL — and
+# t.Skip() when it is unset. Setting the wrong one skips every test and still
+# prints "ok", which looks exactly like a passing run.
+#
+# Note the database name: openkit_TEST, not openkit. This suite is destructive —
+# TestMigrationsDownIsClean runs `migrate down` and drops every table — so it
+# must never point at a database holding data you want to keep. Compose creates
+# openkit_test on first boot (deploy/postgres-init/).
+FCC_TEST_DATABASE_URL ?= postgres://openkit:openkit@localhost:5434/openkit_test?sslmode=disable
+
+test-integration: ## Run integration tests (needs Postgres + the migrate CLI)
+	@command -v migrate >/dev/null || { \
+		echo "ERROR: golang-migrate CLI not found in PATH."; \
+		echo "       The schema tests skip silently without it, so this target"; \
+		echo "       would report success while testing nothing."; \
+		echo "       Install: brew install golang-migrate"; \
+		exit 1; }
+	@case "$(FCC_TEST_DATABASE_URL)" in \
+		*/openkit\?*|*/openkit) \
+			echo "REFUSING: FCC_TEST_DATABASE_URL points at the 'openkit' database."; \
+			echo "          This suite drops every table. Use openkit_test, or pass"; \
+			echo "          an explicit throwaway DSN if you really mean it."; \
+			exit 1;; \
+	esac
+	@echo "==> FCC_TEST_DATABASE_URL=$(FCC_TEST_DATABASE_URL)"
+	@echo "==> this suite DROPS EVERY TABLE in that database"
+	@echo "==> running verbosely on purpose: these tests t.Skip() when the DB is"
+	@echo "    unreachable, and a silent skip is indistinguishable from a pass."
+	FCC_TEST_DATABASE_URL="$(FCC_TEST_DATABASE_URL)" \
+		$(GO) test ./tests/integration/... ./internal/db/... \
+		-count=1 -tags=integration -p 1 -v
 
 vet: ## go vet
 	$(GO) vet ./...

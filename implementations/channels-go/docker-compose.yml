@@ -24,6 +24,10 @@ services:
       retries: 30
     volumes:
       - channels_pgdata:/var/lib/postgresql/data
+      # Creates openkit_test on first boot — see the script's header for why
+      # the integration suite must not share the app database. Mounted as a
+      # single file so it does not hide the image's own 10_postgis.sh.
+      - ../../deploy/postgres-init/20-create-test-db.sh:/docker-entrypoint-initdb.d/20-create-test-db.sh:ro
 
   comms-channels:
     build:

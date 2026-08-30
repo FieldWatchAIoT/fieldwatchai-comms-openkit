@@ -46,6 +46,13 @@ services:
       retries: 30
     volumes:
       - openkit_pgdata:/var/lib/postgresql/data
+      # Creates openkit_test on first boot, so the destructive integration
+      # suite has a database of its own to drop and rebuild. Mounted as a
+      # single FILE, not a directory: the postgis image ships its own
+      # 10_postgis.sh in here, and a directory mount would hide it — leaving
+      # openkit without PostGIS and the first migration dirty. The 20- prefix
+      # keeps this ordered after it.
+      - ./deploy/postgres-init/20-create-test-db.sh:/docker-entrypoint-initdb.d/20-create-test-db.sh:ro
 
   localstack:
     image: localstack/localstack:3

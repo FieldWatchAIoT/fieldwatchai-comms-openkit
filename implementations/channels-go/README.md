@@ -210,14 +210,32 @@ All routes are authenticated with a shared bearer token
 
 | Route | Purpose |
 |---|---|
-| `GET /healthz` | liveness + readiness |
+| `GET /healthz` | liveness + readiness (the only unauthenticated route) |
 | `POST /v1/ingest` | accept one canonical message (called by webhook) |
 | `GET /v1/accounts/lookup?type=&identifier=` | webhook uses this to resolve platform -> account_id |
-| `POST /v1/accounts`, `GET /v1/accounts/{id}`, ... | account CRUD |
-| `POST /v1/contacts`, `POST /v1/contacts/bulk-import`, ... | contact + address-book CRUD |
+| `GET /v1/accounts` | list accounts for the tenant, with routing |
+| `POST /v1/accounts` | create an account |
+| `PATCH /v1/accounts/{id}` · `DELETE /v1/accounts/{id}` | update / delete an account |
+| `GET /v1/contacts` · `POST /v1/contacts` | list / create contacts |
+| `PATCH /v1/contacts/{id}` · `DELETE /v1/contacts/{id}` | update / delete a contact |
+| `POST /v1/contacts/bulk-import` | bulk address-book import |
+| `GET /v1/contacts/short_id_check?short_id=` | check a short-id for collisions, with suggestions |
 | `POST /v1/outbound` | operator-initiated outbound send |
-| `GET/POST /v1/channels`, `/v1/channels/{id}` | channel CRUD |
+| `GET /v1/channels` · `GET /v1/channels/{id}` | list / read channels (**read-only**) |
+| `GET /v1/channels/{id}/accounts` | list the accounts linked to a channel |
+| `POST /v1/channels/{id}/accounts` · `DELETE /v1/channels/{id}/accounts/{account_id}` | link / unlink an account |
 | `POST /v1/workflows/replay` | re-fire unfired forwards for a channel |
+
+Two gaps worth knowing before you plan around this surface:
+
+- **There is no channel-create route.** Channels can be listed, read, and had
+  accounts linked to them, but the row itself — including `workflow_url`,
+  `parser_config`, and `confidence_thresholds` — is created in SQL. So
+  configuring workflow forwarding today means a direct `INSERT`.
+- **There is no tenant route at all.** `tenants` is provisioned out of band, and
+  `accounts.tenant_id` is a foreign key onto it, so `POST /v1/accounts` against
+  an unknown tenant fails the constraint and returns a bare `internal_error`.
+  The root [`deploy/seed/`](../../deploy/seed/) script shows the SQL.
 
 Requests carry `X-Tenant-Id`; the middleware surfaces it as a context value
 that every handler + service uses to scope its queries. There is no
@@ -235,12 +253,40 @@ Manager ARNs to env vars at container start — see
 
 ```sh
 make test              # unit tests (no external deps)
-make test-integration  # integration tests (needs Postgres+PostGIS running)
 make vet
+
+docker compose up -d db   # integration tests need a live Postgres+PostGIS
+make test-integration
 ```
 
 The integration tests under `tests/integration/` exercise the ingest pipeline
-+ CRUD paths against a live Postgres.
++ CRUD paths against a live Postgres, and `internal/db/` covers the pool and
+migrations. All of them are behind the `integration` build tag.
+
+> **This suite is destructive.** `TestMigrationsDownIsClean` runs
+> `migrate down`, which drops every table in the target database. Never point
+> it at anything whose contents you want to keep.
+
+Because of that, compose creates a second database, `openkit_test`, on first
+boot ([`deploy/postgres-init/`](../../deploy/postgres-init/)), and
+`make test-integration` targets it rather than the `openkit` database the demo
+uses. The target refuses outright to run against `openkit`.
+
+The tests read **`FCC_TEST_DATABASE_URL`**, not `DATABASE_URL`. This matters
+more than it looks: they `t.Skip()` when that variable is unset, and a skipped
+Go test still prints `ok` — so pointing them at the wrong variable produces a
+run that reports success while executing nothing. `make test-integration`
+therefore sets the variable itself, runs verbosely so skips are visible, and
+refuses to start when the `golang-migrate` CLI is missing (the schema tests
+would otherwise skip silently too). Override it for a throwaway database of
+your own:
+
+```sh
+make test-integration FCC_TEST_DATABASE_URL='postgres://user:pass@host:5432/scratch?sslmode=disable'
+```
+
+Expect 8 integration tests plus the `internal/db` suite. A `SKIP` means the
+database was unreachable — that is a failure to run, not a pass.
 
 ## Deployment
 
