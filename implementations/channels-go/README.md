@@ -75,7 +75,7 @@ docker compose exec db psql -U openkit -d openkit -c '\dt'
 
 ## Quick start (local Go)
 
-Prerequisites: Go 1.24+, Postgres 16 with PostGIS.
+Prerequisites: Go 1.25+, Postgres 16 with PostGIS.
 
 ```sh
 docker compose up -d db                # or your own Postgres+PostGIS

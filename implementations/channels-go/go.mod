@@ -1,6 +1,6 @@
 module github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go
 
-go 1.24.3
+go 1.25.13
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.42.1
@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.63.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.7.5
+	github.com/jackc/pgx/v5 v5.9.2
 )
 
 require (
@@ -29,7 +29,6 @@ require (
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/lib/pq v1.10.9 // indirect
-	golang.org/x/crypto v0.45.0 // indirect
-	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
 )

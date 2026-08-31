@@ -1,0 +1,64 @@
+# Automated dependency updates.
+#
+# govulncheck in CI catches a vulnerability once it is published against code we
+# already ship. This is the other half: it keeps dependencies moving so the gap
+# between "a fix exists" and "we have it" stays small. Both matter — the first
+# govulncheck run on this repository found 34 reachable vulnerabilities, almost
+# all from a Go toolchain that had drifted two dozen patch releases behind
+# without anyone noticing.
+#
+# Grouped into one pull request per ecosystem per week. Disaster-response
+# software is maintained by small teams between incidents; a stream of
+# single-dependency PRs gets ignored, and ignored updates are how the drift
+# happened in the first place.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /implementations/webhook-go
+    schedule:
+      interval: weekly
+    groups:
+      go-dependencies:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: gomod
+    directory: /implementations/channels-go
+    schedule:
+      interval: weekly
+    groups:
+      go-dependencies:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # The workflow pins actions/checkout and actions/setup-go by major version.
+  # Those went stale once already — the first CI run annotated every job with a
+  # Node 20 deprecation notice.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(ci)"
+
+  # The two service images and the Postgres/LocalStack images used by the demo
+  # stack. A base image with a known CVE is the same class of problem as a stale
+  # module, and nothing else in the pipeline watches these.
+  - package-ecosystem: docker
+    directory: /implementations/webhook-go/deploy
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: docker
+    directory: /implementations/channels-go/deploy
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"

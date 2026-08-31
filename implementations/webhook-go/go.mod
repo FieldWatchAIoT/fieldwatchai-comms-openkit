@@ -1,6 +1,6 @@
 module github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/webhook-go
 
-go 1.24.3
+go 1.25.13
 
 require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.23

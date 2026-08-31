@@ -49,6 +49,18 @@ jobs:
       - name: unit tests
         run: go test ./... -count=1
 
+      # Known-vulnerability scan. This is not belt-and-braces: the first run of
+      # this step found 34 vulnerabilities affecting reachable code in each
+      # module, almost all from a Go toolchain pinned two dozen patch releases
+      # behind. Nothing else in the pipeline would have noticed.
+      #
+      # govulncheck reports only vulnerabilities your code actually reaches, so
+      # a failure here is a real call path, not a transitive advisory to triage.
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
   # The channels integration suite needs a live Postgres with PostGIS, and it is
   # destructive — it runs `migrate down` and drops every table — so it gets a
   # database of its own here, exactly as it does in docker-compose.
