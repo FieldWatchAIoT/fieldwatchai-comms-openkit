@@ -364,4 +364,4 @@ The Comms OpenKit is developed and maintained by [FieldWatch AI](https://fieldwa
 
 This work is being carried out in part under a commitment to the UNFCCC AI for Climate Action Award programme. The award recognizes the intent to open-source the protocol and reference implementations underlying FieldWatch's disaster-response coordination product, so that any climate-vulnerable jurisdiction can adopt the same infrastructure without paying for it.
 
-If your agency, NGO, or research group deploys this stack, we would love to hear about it — even a one-line email to `hello@fieldwatchai.io` helps us make the case that open protocols for humanitarian comms are worth investing in.
+If your agency, NGO, or research group deploys this stack, we would love to hear about it — even a one-line email to `command@fieldwatchai.io` helps us make the case that open protocols for humanitarian comms are worth investing in.

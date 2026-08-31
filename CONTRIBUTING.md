@@ -48,7 +48,7 @@ so a breaking change ripples outward and needs discussion.
 
 ### Big picture / product direction
 
-Open an issue with the `discussion` label, or email `hello@fieldwatchai.io`
+Open an issue with the `discussion` label, or email `command@fieldwatchai.io`
 if you would rather start in private.
 
 ## Style
