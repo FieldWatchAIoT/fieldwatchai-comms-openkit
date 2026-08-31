@@ -59,7 +59,7 @@ everything in this repository. See [`../LICENSE`](../LICENSE).
   accepted under the Developer Certificate of Origin (see
   [`../CONTRIBUTING.md`](../CONTRIBUTING.md)). A more formal
   governance model will be adopted as the contributor base grows.
-- **Contact:** `hello@fieldwatchai.io`.
+- **Contact:** `command@fieldwatchai.io`.
 
 ## 4. Platform independence
 
@@ -212,5 +212,5 @@ active work. All nine are targeted to be closable by Q1 2027, in time
 for a registry submission.
 
 If you are a DPG Alliance evaluator, please email
-`hello@fieldwatchai.io` — we would rather receive early feedback than
+`command@fieldwatchai.io` — we would rather receive early feedback than
 wait until submission.

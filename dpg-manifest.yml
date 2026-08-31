@@ -26,7 +26,7 @@ organizations:
   - name: FieldWatch AI
     website: https://fieldwatch.earth/
     org_type: owner
-    contact_email: hello@fieldwatchai.io
+    contact_email: command@fieldwatchai.io
 
 # DPG Standard categories
 categories:
@@ -159,7 +159,7 @@ doNoHarm: >-
 
 # Contacts.
 contact:
-  general: hello@fieldwatchai.io
+  general: command@fieldwatchai.io
   security: security@fieldwatchai.io
   conduct: conduct@fieldwatchai.io
 
