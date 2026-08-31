@@ -21,6 +21,7 @@ import (
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/crypto"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/db"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/diagnostics"
+	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/export"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/httpapi"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/ingest"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/integrations/emailses"
@@ -35,6 +36,7 @@ import (
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/queries/goqueries"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/replay"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/resolver"
+	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/retention"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/tenants"
 	"github.com/FieldWatchAIoT/fieldwatchai-comms-openkit/implementations/channels-go/internal/workflow"
 	"github.com/google/uuid"
@@ -127,6 +129,10 @@ func main() {
 	tenantHandler := tenants.NewHandler(tenants.NewService(queries), logger)
 	diagHandler := diagnostics.NewHandler(diagnostics.NewService(queries), logger)
 	messageHandler := messagelog.NewHandler(messagelog.NewService(queries), logger)
+	// Data portability and lifecycle: an adopter must be able to take their
+	// data out, delete it on a schedule, and honour an erasure request.
+	exportHandler := export.NewHandler(export.NewService(queries), logger)
+	retentionHandler := retention.NewHandler(retention.NewService(queries, time.Now), logger)
 	acctHandler.RegisterRoutes(v1)
 	ingestHandler.RegisterRoutes(v1)
 	contactHandler.RegisterRoutes(v1)
@@ -136,6 +142,8 @@ func main() {
 	tenantHandler.RegisterRoutes(v1)
 	diagHandler.RegisterRoutes(v1)
 	messageHandler.RegisterRoutes(v1)
+	exportHandler.RegisterRoutes(v1)
+	retentionHandler.RegisterRoutes(v1)
 	authed := httpapi.WithBearerAuth(cfg.InternalAPIToken, logger, v1)
 	srv.Mux().Handle("/v1/accounts", authed)
 	srv.Mux().Handle("/v1/accounts/", authed)
@@ -150,6 +158,8 @@ func main() {
 	srv.Mux().Handle("/v1/tenants/", authed)
 	srv.Mux().Handle("/v1/diagnostics", authed)
 	srv.Mux().Handle("/v1/messages", authed)
+	srv.Mux().Handle("/v1/export/", authed)
+	srv.Mux().Handle("/v1/retention/", authed)
 
 	// The console is markup only and carries no data; it authenticates in the
 	// browser against the routes above. Mounted outside `authed` because a

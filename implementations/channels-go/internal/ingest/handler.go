@@ -46,7 +46,9 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, ErrInvalidAccount):
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_account"})
-		case errors.Is(err, ErrAccountNotFound):
+		case errors.Is(err, ErrAccountNotFound), errors.Is(err, ErrAccountInactive):
+			// Same response for both: the caller should drop the message either
+			// way, and telling them apart would reveal which identifiers exist.
 			writeJSON(w, http.StatusNotFound, map[string]any{"error": "account_not_found"})
 		default:
 			h.logger.Error("ingest failed", "event", "ingest_failed", "error", err.Error())

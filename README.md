@@ -297,6 +297,8 @@ For a real deployment, each implementation ships a Terraform module:
 | AI-teammate protocol (v1 draft) | shipped | [`spec/ai-teammate-protocol.md`](./spec/ai-teammate-protocol.md) |
 | Transport adapter contract | shipped | [`spec/transport-adapter.md`](./spec/transport-adapter.md) |
 | Digital Public Goods alignment mapping | shipped | [`docs/dpg-alignment.md`](./docs/dpg-alignment.md) |
+| Privacy and data-handling document | shipped | [`docs/privacy.md`](./docs/privacy.md) |
+| Harms analysis (do-no-harm assessment) | shipped | [`docs/harms-analysis.md`](./docs/harms-analysis.md) |
 | DPG manifest | shipped | [`dpg-manifest.yml`](./dpg-manifest.yml) |
 | Deployment guide (docker-compose, ECS, k8s) | shipped | [`docs/deployment.md`](./docs/deployment.md) |
 | Go webhook reference implementation (inbound) | shipped | [`implementations/webhook-go/`](./implementations/webhook-go/) |
@@ -322,7 +324,12 @@ The Digital Public Goods Alliance defines a DPG as open-source software, data, A
 - **SDG 13** — Climate Action (target 13.1: strengthen resilience and adaptive capacity)
 - **SDG 17** — Partnerships (target 17.6: technology cooperation)
 
-A full mapping against the 9 DPG Standard indicators lives in [`docs/dpg-alignment.md`](./docs/dpg-alignment.md). Registry submission is targeted for Q1 2027.
+A full mapping against the 9 DPG Standard indicators lives in
+[`docs/dpg-alignment.md`](./docs/dpg-alignment.md), alongside a
+[privacy and data-handling document](./docs/privacy.md) and a
+[harms analysis](./docs/harms-analysis.md). All nine indicators are met for what
+is shipped; the work that remains is named rather than glossed. Registry
+submission is targeted for Q1 2027.
 
 ## Roadmap
 

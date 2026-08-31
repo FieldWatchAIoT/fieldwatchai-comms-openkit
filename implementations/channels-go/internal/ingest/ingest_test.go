@@ -157,8 +157,7 @@ func TestIngestEchoBackDispatches(t *testing.T) {
 	fake := &fakeStore{
 		acct: goqueries.Account{
 			ID: accID, TenantID: uuid.New(), Type: "whatsapp",
-			PlatformIdentifier: "inst123", CredentialsEncrypted: []byte("ciphertext"),
-		},
+			PlatformIdentifier: "inst123", CredentialsEncrypted: []byte("ciphertext"), Status: "active"},
 		createID: uuid.MustParse("99999999-9999-9999-9999-999999999999"),
 	}
 	res := fakeResolver{m: resolver.Match{ShortIDMatch: resolver.MatchExact, ContactID: &contactID, Alternatives: []resolver.Alt{}}}
@@ -204,7 +203,7 @@ func TestIngestExecuteFiresWorkflow(t *testing.T) {
 	chID := uuid.New()
 	contactID := uuid.New()
 	fake := &fakeStore{
-		acct:     goqueries.Account{ID: accID, TenantID: uuid.New(), Type: "whatsapp", PlatformIdentifier: "179557"},
+		acct:     goqueries.Account{ID: accID, TenantID: uuid.New(), Type: "whatsapp", PlatformIdentifier: "179557", Status: "active"},
 		createID: uuid.New(),
 		channelRow: goqueries.GetInboundChannelForAccountRow{
 			ID:                   chID,
@@ -252,7 +251,7 @@ func TestIngestPassthroughForwardsRawText(t *testing.T) {
 	accID := uuid.New()
 	chID := uuid.New()
 	fake := &fakeStore{
-		acct:     goqueries.Account{ID: accID, TenantID: uuid.New(), Type: "whatsapp", PlatformIdentifier: "179557"},
+		acct:     goqueries.Account{ID: accID, TenantID: uuid.New(), Type: "whatsapp", PlatformIdentifier: "179557", Status: "active"},
 		createID: uuid.New(),
 		channelRow: goqueries.GetInboundChannelForAccountRow{
 			ID:           chID,
@@ -295,7 +294,7 @@ func TestIngestUsesChannelConfig(t *testing.T) {
 	accID := uuid.New()
 	chID := uuid.New()
 	fake := &fakeStore{
-		acct:     goqueries.Account{ID: accID, TenantID: uuid.New(), Type: "whatsapp", PlatformIdentifier: "179557"},
+		acct:     goqueries.Account{ID: accID, TenantID: uuid.New(), Type: "whatsapp", PlatformIdentifier: "179557", Status: "active"},
 		createID: uuid.New(),
 		channelRow: goqueries.GetInboundChannelForAccountRow{
 			ID:                   chID,
@@ -335,8 +334,7 @@ func TestIngestRecallCancelsRecentEcho(t *testing.T) {
 	fake := &fakeStore{
 		acct: goqueries.Account{
 			ID: accID, TenantID: uuid.New(), Type: "whatsapp",
-			PlatformIdentifier: "179557", CredentialsEncrypted: []byte("ct"),
-		},
+			PlatformIdentifier: "179557", CredentialsEncrypted: []byte("ct"), Status: "active"},
 		createID:  uuid.New(),
 		recallRow: goqueries.FindRecentEchoForSenderRow{ID: recalledID, BodyText: "42 DAMAGE test"},
 	}
@@ -368,7 +366,7 @@ func TestIngestRecallCancelsRecentEcho(t *testing.T) {
 func TestIngestRecallNothingToRecall(t *testing.T) {
 	accID := uuid.New()
 	fake := &fakeStore{
-		acct:      goqueries.Account{ID: accID, TenantID: uuid.New(), Type: "whatsapp", PlatformIdentifier: "179557", CredentialsEncrypted: []byte("ct")},
+		acct:      goqueries.Account{ID: accID, TenantID: uuid.New(), Type: "whatsapp", PlatformIdentifier: "179557", CredentialsEncrypted: []byte("ct"), Status: "active"},
 		createID:  uuid.New(),
 		recallErr: pgx.ErrNoRows, // no recent echo in the window
 	}
@@ -410,7 +408,7 @@ func TestIngestStoresNewMessage(t *testing.T) {
 	accID := uuid.New()
 	tenant := uuid.New()
 	fake := &fakeStore{
-		acct:     goqueries.Account{ID: accID, TenantID: tenant},
+		acct:     goqueries.Account{ID: accID, TenantID: tenant, Status: "active"},
 		createID: uuid.MustParse("99999999-9999-9999-9999-999999999999"),
 	}
 	svc := newService(fake)
@@ -446,7 +444,7 @@ func TestIngestReplayOnConflict(t *testing.T) {
 	accID := uuid.New()
 	existing := uuid.New()
 	fake := &fakeStore{
-		acct:      goqueries.Account{ID: accID, TenantID: uuid.New()},
+		acct:      goqueries.Account{ID: accID, TenantID: uuid.New(), Status: "active"},
 		createErr: pgx.ErrNoRows, // ON CONFLICT DO NOTHING returns no row
 		replayID:  existing,
 	}
@@ -486,7 +484,7 @@ func TestIngestAccountNotFound(t *testing.T) {
 // the failure mode a console can't see, so ingest must at least say it happened.
 func TestIngestWarnsWhenAccountHasNoChannel(t *testing.T) {
 	accID := uuid.New()
-	fake := &fakeStore{acct: goqueries.Account{ID: accID, TenantID: uuid.New(), Type: "whatsapp"}}
+	fake := &fakeStore{acct: goqueries.Account{ID: accID, TenantID: uuid.New(), Type: "whatsapp", Status: "active"}}
 
 	var logs strings.Builder
 	svc := NewService(Deps{
@@ -530,7 +528,7 @@ func TestIngestForwardCarriesPlatformAndAccountType(t *testing.T) {
 		t.Run(tc.acctType, func(t *testing.T) {
 			accID := uuid.New()
 			fake := &fakeStore{
-				acct:     goqueries.Account{ID: accID, TenantID: uuid.New(), Type: tc.acctType, PlatformIdentifier: "+12897792824"},
+				acct:     goqueries.Account{ID: accID, TenantID: uuid.New(), Type: tc.acctType, PlatformIdentifier: "+12897792824", Status: "active"},
 				createID: uuid.New(),
 				channelRow: goqueries.GetInboundChannelForAccountRow{
 					ID:           uuid.New(),
@@ -582,7 +580,7 @@ func TestEWKTPointPutsLongitudeFirst(t *testing.T) {
 func TestIngestPersistsLocation(t *testing.T) {
 	accID := uuid.New()
 	fake := &fakeStore{
-		acct:     goqueries.Account{ID: accID, TenantID: uuid.New(), Type: "whatsapp"},
+		acct:     goqueries.Account{ID: accID, TenantID: uuid.New(), Type: "whatsapp", Status: "active"},
 		createID: uuid.New(),
 	}
 	svc := newService(fake)
@@ -604,5 +602,57 @@ func TestIngestPersistsLocation(t *testing.T) {
 	}
 	if fake.gotCreate.BodyLocation != "" {
 		t.Errorf("absent location must be empty, got %q", fake.gotCreate.BodyLocation)
+	}
+}
+
+// A suspended account must stop traffic. Before this was enforced the status
+// column was decorative: an operator who suspended an abusive or compromised
+// account would reasonably believe they had stopped it, and messages kept
+// flowing exactly as before.
+func TestIngestRejectsInactiveAccount(t *testing.T) {
+	for _, status := range []string{"suspended", "banned"} {
+		accID := uuid.New()
+		fs := &fakeStore{acct: goqueries.Account{
+			ID: accID, TenantID: uuid.New(), Type: "whatsapp", Status: status,
+		}}
+		svc := NewService(Deps{
+			Store:      fs,
+			Resolver:   &fakeResolver{},
+			Dispatcher: outbound.NewRegistry(),
+			ParserCfg:  parser.Config{Commands: []string{"STATUS"}},
+			Thresholds: policy.DefaultThresholds,
+			Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+			Now:        func() time.Time { return time.Unix(0, 0).UTC() },
+			NewID:      uuid.New,
+		})
+
+		_, err := svc.Ingest(context.Background(), msgFor(accID.String()))
+		if !errors.Is(err, ErrAccountInactive) {
+			t.Errorf("status %q: want ErrAccountInactive, got %v", status, err)
+		}
+		if fs.gotCreate.ID != uuid.Nil {
+			t.Errorf("status %q: message was persisted despite an inactive account", status)
+		}
+	}
+}
+
+// The active path must keep working — this guard sits in front of every message.
+func TestIngestAcceptsActiveAccount(t *testing.T) {
+	accID := uuid.New()
+	fs := &fakeStore{acct: goqueries.Account{
+		ID: accID, TenantID: uuid.New(), Type: "whatsapp", Status: "active",
+	}, createID: uuid.New()}
+	svc := NewService(Deps{
+		Store:      fs,
+		Resolver:   &fakeResolver{},
+		Dispatcher: outbound.NewRegistry(),
+		ParserCfg:  parser.Config{Commands: []string{"STATUS"}},
+		Thresholds: policy.DefaultThresholds,
+		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Now:        func() time.Time { return time.Unix(0, 0).UTC() },
+		NewID:      uuid.New,
+	})
+	if _, err := svc.Ingest(context.Background(), msgFor(accID.String())); err != nil {
+		t.Fatalf("active account should ingest: %v", err)
 	}
 }
