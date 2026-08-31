@@ -168,6 +168,13 @@ type Querier interface {
 	ListUnroutableAccounts(ctx context.Context, tenantID uuid.UUID) ([]ListUnroutableAccountsRow, error)
 	// Resolve an account by platform type + identifier (used by the webhook's
 	// account lookup). Returns only the ids — never credentials.
+	//
+	// Only an active account resolves. Suspending an account is the documented way
+	// to stop traffic from an abusive or compromised sender, and until this filter
+	// existed the status column was decorative: a suspended account kept accepting
+	// messages exactly as before, so an operator who suspended one would reasonably
+	// believe they had stopped it. A suspended account now looks unregistered to
+	// the webhook, which acknowledges and drops.
 	LookupAccount(ctx context.Context, arg LookupAccountParams) (LookupAccountRow, error)
 	MarkMessageRecalled(ctx context.Context, id uuid.UUID) error
 	MarkWorkflowFired(ctx context.Context, id uuid.UUID) error

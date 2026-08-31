@@ -139,8 +139,11 @@ privacyAndDataProtection: >-
   delivered — no enrichment, no geolocation, no profiling. Media is
   passed through as URLs to platform hosting; the OpenKit does not
   re-host. Reference implementations do not log message bodies at
-  INFO or higher log levels. Tenant-defined retention and hard-delete
-  are on the near roadmap.
+  INFO or higher log levels. Tenant-defined retention and subject
+  erasure are implemented — POST /v1/retention/purge and
+  /v1/retention/erase-endpoint, both dry-run by default — and full
+  data export is available as JSON Lines via /v1/export/messages.
+  Detail in docs/privacy.md.
 
 # Do-no-harm posture — most relevant to the AI-teammate protocol.
 doNoHarm: >-
@@ -149,7 +152,10 @@ doNoHarm: >-
   protocol constrains any AI participant to be silent by default,
   summoned only, always yielding to humans, read-only in v1, with
   every action audit-logged. Verification is fail-closed on every
-  webhook. A dedicated harms-analysis document is targeted for Q1 2027.
+  webhook, and account status gates traffic so a compromised sender can
+  be suspended. A full harms analysis — seven named harms, what is built
+  against each, what is left to the deploying agency, and an open list
+  of known gaps — is published at docs/harms-analysis.md.
 
 # Contacts.
 contact:

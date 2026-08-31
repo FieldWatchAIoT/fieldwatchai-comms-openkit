@@ -56,8 +56,15 @@ WHERE id = $1 AND tenant_id = $2;
 -- name: LookupAccount :one
 -- Resolve an account by platform type + identifier (used by the webhook's
 -- account lookup). Returns only the ids — never credentials.
+--
+-- Only an active account resolves. Suspending an account is the documented way
+-- to stop traffic from an abusive or compromised sender, and until this filter
+-- existed the status column was decorative: a suspended account kept accepting
+-- messages exactly as before, so an operator who suspended one would reasonably
+-- believe they had stopped it. A suspended account now looks unregistered to
+-- the webhook, which acknowledges and drops.
 SELECT id, tenant_id FROM accounts
-WHERE type = $1 AND platform_identifier = $2;
+WHERE type = $1 AND platform_identifier = $2 AND status = 'active';
 
 -- name: GetAccountByID :one
 -- Resolve an account by id without a tenant filter; the row carries tenant_id.

@@ -34,6 +34,11 @@ const defaultRecallSeconds = 120
 var (
 	ErrInvalidAccount  = errors.New("invalid account id")
 	ErrAccountNotFound = errors.New("account not found")
+	// ErrAccountInactive means the account exists but is suspended or banned.
+	// Treated as not-found by the handler: the caller should drop the message,
+	// and distinguishing the two would tell an unauthenticated prober which
+	// identifiers are real.
+	ErrAccountInactive = errors.New("account is not active")
 )
 
 // store is the narrow query API ingest needs; *goqueries.Queries satisfies it.
@@ -138,6 +143,14 @@ func (s *Service) Ingest(ctx context.Context, msg canonical.Message) (Result, er
 			return Result{}, ErrAccountNotFound
 		}
 		return Result{}, fmt.Errorf("resolve account: %w", err)
+	}
+	// Defence in depth behind the lookup filter: /v1/ingest can be called
+	// directly, and a suspended account must not persist or dispatch anything
+	// on either path.
+	if acct.Status != "active" {
+		s.d.Logger.Warn("dropping message for inactive account",
+			"event", "account_inactive", "account_id", accID, "status", acct.Status)
+		return Result{}, ErrAccountInactive
 	}
 
 	text := deref(msg.Body.Text)

@@ -242,7 +242,7 @@ func (q *Queries) ListAccountsWithRoutingForTenant(ctx context.Context, tenantID
 
 const lookupAccount = `-- name: LookupAccount :one
 SELECT id, tenant_id FROM accounts
-WHERE type = $1 AND platform_identifier = $2
+WHERE type = $1 AND platform_identifier = $2 AND status = 'active'
 `
 
 type LookupAccountParams struct {
@@ -257,6 +257,13 @@ type LookupAccountRow struct {
 
 // Resolve an account by platform type + identifier (used by the webhook's
 // account lookup). Returns only the ids — never credentials.
+//
+// Only an active account resolves. Suspending an account is the documented way
+// to stop traffic from an abusive or compromised sender, and until this filter
+// existed the status column was decorative: a suspended account kept accepting
+// messages exactly as before, so an operator who suspended one would reasonably
+// believe they had stopped it. A suspended account now looks unregistered to
+// the webhook, which acknowledges and drops.
 func (q *Queries) LookupAccount(ctx context.Context, arg LookupAccountParams) (LookupAccountRow, error) {
 	row := q.db.QueryRow(ctx, lookupAccount, arg.Type, arg.PlatformIdentifier)
 	var i LookupAccountRow
