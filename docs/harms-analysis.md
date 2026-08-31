@@ -241,7 +241,7 @@ the wrong vantage point for finding its blind spots.
 
 If you work in disaster response, digital safety, or humanitarian protection and
 you can see a harm we have not listed, please open an issue — or email
-`security@fieldwatchai.io` if raising it publicly would itself create risk.
+`command@fieldwatchai.io` if raising it publicly would itself create risk.
 
 Contributions from people who have coordinated an actual response are worth more
 here than any amount of review from engineers.

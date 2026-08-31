@@ -13,7 +13,7 @@ distributed.
 
 ### How to report
 
-Email: **security@fieldwatchai.io**
+Email: **command@fieldwatchai.io**
 
 Please include, to the extent you can:
 

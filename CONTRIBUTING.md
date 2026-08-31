@@ -71,7 +71,7 @@ Apache License 2.0 (the project license — see [`LICENSE`](./LICENSE)).
 ## Conduct
 
 See [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md). Enforcement contact is
-`conduct@fieldwatchai.io`.
+`command@fieldwatchai.io`.
 
 ## Security
 

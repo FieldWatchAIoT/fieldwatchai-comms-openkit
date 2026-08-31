@@ -160,8 +160,8 @@ doNoHarm: >-
 # Contacts.
 contact:
   general: command@fieldwatchai.io
-  security: security@fieldwatchai.io
-  conduct: conduct@fieldwatchai.io
+  security: command@fieldwatchai.io
+  conduct: command@fieldwatchai.io
 
 # Origin.
 originatingCountry: BS  # Bahamas (ISO 3166-1 alpha-2)

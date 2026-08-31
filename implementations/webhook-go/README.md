@@ -66,7 +66,7 @@ real SQS.
 
 ## Quick start (local Go)
 
-Prerequisites: Go 1.24+.
+Prerequisites: Go 1.25+.
 
 ```sh
 cd implementations/webhook-go

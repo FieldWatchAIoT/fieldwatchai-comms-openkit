@@ -9,7 +9,7 @@
 #   # -> watch the fakechannels logs print the canonical message it received
 services:
   fakechannels:
-    image: golang:1.24-alpine
+    image: golang:1.25-alpine
     working_dir: /src
     volumes:
       - .:/src

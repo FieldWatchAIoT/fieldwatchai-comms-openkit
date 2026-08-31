@@ -251,7 +251,7 @@ See [`harms-analysis.md`](./harms-analysis.md) for the wider misuse assessment.
 ## Reporting a privacy problem
 
 Please do not open a public issue. See [`SECURITY.md`](../SECURITY.md), or email
-`security@fieldwatchai.io`.
+`command@fieldwatchai.io`.
 
 If you find that something in this document is not true of the code, that is a
 bug — report it the same way, and we will fix the code or the document.
