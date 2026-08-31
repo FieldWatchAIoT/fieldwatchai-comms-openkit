@@ -11,6 +11,10 @@ import (
 )
 
 type Querier interface {
+	// Detach replies that point at messages about to be purged, so the delete does
+	// not fail on messages_in_reply_to_message_id_fkey. The surviving message keeps
+	// its own content; it just no longer points at a row that will not exist.
+	ClearReplyLinksToPurgedMessages(ctx context.Context, arg ClearReplyLinksToPurgedMessagesParams) (int64, error)
 	// Queries behind GET /v1/diagnostics — the "why is nothing happening?" check.
 	//
 	// The failure these exist to surface is silent by construction: an account with
@@ -20,7 +24,27 @@ type Querier interface {
 	CountAccountsForTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	CountChannelsForTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	CountContactsForTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	CountMessagesForContact(ctx context.Context, arg CountMessagesForContactParams) (int64, error)
+	CountMessagesForEndpoint(ctx context.Context, arg CountMessagesForEndpointParams) (int64, error)
 	CountMessagesForTenant(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	// Queries behind retention and erasure.
+	//
+	// Two different obligations, deliberately kept apart:
+	//
+	//   Retention  — delete everything older than a window the tenant sets. Blunt,
+	//                scheduled, applies to all traffic.
+	//   Erasure    — remove one person's personal data on request, without
+	//                destroying the operational record that a message existed.
+	//
+	// Erasure redacts rather than deletes. A disaster response's message history is
+	// an operational and often legal record: a missing-person report that vanishes
+	// entirely can make an after-action review impossible and, in some
+	// jurisdictions, breaks a retention duty that sits alongside the erasure right.
+	// Redaction removes the identifying content — who sent it, what they said, the
+	// verbatim provider envelope — while leaving the fact, timing, and routing of
+	// the message intact. Where a tenant genuinely needs the row gone, retention
+	// purge does that.
+	CountMessagesOlderThan(ctx context.Context, arg CountMessagesOlderThanParams) (int64, error)
 	CreateAccount(ctx context.Context, arg CreateAccountParams) (Account, error)
 	// Create a routing channel. Until this existed the row could only be written by
 	// hand in SQL, which meant a new deployment silently forwarded nothing: with no
@@ -46,6 +70,30 @@ type Querier interface {
 	CreateTenant(ctx context.Context, arg CreateTenantParams) (Tenant, error)
 	DeleteAccount(ctx context.Context, arg DeleteAccountParams) (int64, error)
 	DeleteContact(ctx context.Context, arg DeleteContactParams) (int64, error)
+	DeleteContactRow(ctx context.Context, arg DeleteContactRowParams) (int64, error)
+	DeleteEndpointsForContact(ctx context.Context, contactID uuid.UUID) (int64, error)
+	// Drop the link between the message and the person, after redaction. The
+	// message survives as an anonymous record of traffic.
+	DetachMessagesFromContact(ctx context.Context, arg DetachMessagesFromContactParams) (int64, error)
+	// The address book, with each contact's endpoints inlined by the caller. Same
+	// keyset approach, ordered by the pair that is unique per tenant.
+	ExportContactsPage(ctx context.Context, arg ExportContactsPageParams) ([]Contact, error)
+	// Endpoints for a page of contacts, fetched in one round trip rather than per
+	// contact.
+	ExportEndpointsForContacts(ctx context.Context, contactIds []uuid.UUID) ([]ExportEndpointsForContactsRow, error)
+	// Queries behind the data-export endpoints.
+	//
+	// Export exists because an adopter must be able to leave. A tool that holds a
+	// disaster response's message history in a database only its own code can read
+	// is not something a public agency should adopt, whatever its licence says.
+	// These stream the whole dataset in stable, non-proprietary JSON — no caps, no
+	// sampling, and keyset pagination so an export of any size runs in constant
+	// memory rather than loading the table.
+	// One page, oldest first, using a keyset cursor rather than OFFSET: OFFSET
+	// re-scans on every page and, worse, silently skips or repeats rows when
+	// traffic arrives mid-export. (received_at, id) is a total order because id is
+	// unique, so the cursor never straddles a tie.
+	ExportMessagesPage(ctx context.Context, arg ExportMessagesPageParams) ([]ExportMessagesPageRow, error)
 	// The most recent inbound message from this sender on this account that was
 	// echoed back and is still inside the recall window ($3 = cutoff). Used to
 	// resolve an "OOPS" recall.
@@ -100,6 +148,7 @@ type Querier interface {
 	// Lightweight projection for the resolver candidate set + short_id_check.
 	ListContactShortIDs(ctx context.Context, tenantID uuid.UUID) ([]ListContactShortIDsRow, error)
 	ListContactsForTenant(ctx context.Context, tenantID uuid.UUID) ([]Contact, error)
+	ListEndpointsForContact(ctx context.Context, contactID uuid.UUID) ([]string, error)
 	// Recent traffic for the console. Deliberately excludes raw_payload (the
 	// verbatim provider envelope, the largest and most sensitive column) and
 	// credentials never appear here at all — this feeds a read-only view whose
@@ -125,6 +174,22 @@ type Querier interface {
 	// Trivial round-trip used to verify the pool can execute a query end to end.
 	// Feature queries (accounts, messages, ...) are added by their own stories.
 	Ping(ctx context.Context) (int32, error)
+	// Hard delete. in_reply_to_message_id is self-referential, so clear inbound
+	// references first (below) or the FK blocks the delete.
+	PurgeMessagesOlderThan(ctx context.Context, arg PurgeMessagesOlderThanParams) (int64, error)
+	// Erasure. Strips the personal content and the raw envelope, and marks the row
+	// so a later reader can tell redaction from an empty message.
+	RedactMessagesForContact(ctx context.Context, arg RedactMessagesForContactParams) (int64, error)
+	// Erasure keyed on the endpoint — the phone number, address or handle a person
+	// actually appears under in the messages table.
+	//
+	// This is the query that does the real work. sender_contact_id exists in the
+	// schema but ingest does not populate it: resolving an inbound sender to an
+	// address-book entry is not something the pipeline does yet, so the identifying
+	// value on a stored message is sender_endpoint. A data-subject request also
+	// arrives as an endpoint ("delete my data, my number is …"), not as an internal
+	// contact id, so this matches how the request is actually made.
+	RedactMessagesForEndpoint(ctx context.Context, arg RedactMessagesForEndpointParams) (int64, error)
 	UnlinkAccountFromChannel(ctx context.Context, arg UnlinkAccountFromChannelParams) (int64, error)
 	UpdateAccount(ctx context.Context, arg UpdateAccountParams) (Account, error)
 	// Partial update: a NULL argument leaves the column untouched, so a caller can
